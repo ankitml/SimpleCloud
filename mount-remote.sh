@@ -12,9 +12,6 @@ RSYNC_OPTIONS="-rltuv --progress --exclude=\".Trash*\""
 SSHFS_OPTIONS="-o password_stdin -o allow_other -o reconnect -o ServerAliveInterval=60"
 EXCLUDE_FROM_SYNC="( *.goutputstream-* | *.swp | *\~ )"
 
-read -s -p "Insert $REMOTE_USERNAME's password: " REMOTE_PASSWORD
-echo ""
-
 function mount-direct-dirs {
 	for directory in "${DIRECT_DIRECTORIES[@]}"
 	do
@@ -87,15 +84,11 @@ function sync-watch {
 }
 
 function unmount {
-	for directory in "${DIRECT_DIRECTORES[@]}"
+	echo "unm"
+	for directory in "${DIRECT_DIRECTORIES[@]}""${SYNC_DIRECTORIES[@]}"
 	do
 		echo "Unmounting $directory"
 		fusermount -uz /home/francisco/$directory
-	done
-	for directory in "${SYNC_DIRECTORES[@]}"
-	do
-		echo "Unmounting $directory-remote"
-		fusermount -uz /home/francisco/."$directory"-remote
 	done
 }
 
@@ -110,10 +103,13 @@ function get-destination {
 	fi
 }
 
+read -s -p "Insert $REMOTE_USERNAME's password: " REMOTE_PASSWORD
+echo ""
 #mount-direct-dirs
 #mount-sync-dirs
 #sync-sleep
+trap "unmount; exit" SIGHUP SIGINT SIGTERM SIGKILL
 sync-watch
 unmount
-	
+
 exit 0
