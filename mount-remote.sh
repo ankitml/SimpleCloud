@@ -6,7 +6,7 @@ SYNC_ROOT="/home/francisco/.Simplecloud/"
 REMOTE_ADDRESS="95.95.67.48"
 REMOTE_CONTAINER="/mnt/things/"
 DIRECT_DIRECTORIES=("Music" "Pictures" "Torrents" "Videos")
-SYNC_DIRECTORIES=("Documents" "Torrents")
+SYNC_DIRECTORIES=("Documents")
 #SYNC_DIRECTORIES=("Torrents")
 RSYNC_OPTIONS="-rltuv --progress --exclude=\".Trash*\""
 SSHFS_OPTIONS="-o password_stdin -o allow_other -o reconnect -o ServerAliveInterval=60"
@@ -38,6 +38,10 @@ function mount-sync-dirs {
 	done
 }
 
+function initial-sync {
+	:
+}
+
 function sync-sleep {
 	while [ "$MOUNTSTATUS" -eq 0 ]
 	do
@@ -64,14 +68,19 @@ function sync-watch {
 		TIME=${NOTIFICATION_LIST[0]}" "${NOTIFICATION_LIST[1]}
 		EVENT=${NOTIFICATION_LIST[2]}
 		SOURCE=$(echo "$NOTIFICATION" | sed "s#\($EVENT\|$TIME\)##g" | sed "s#^[[:space:]]*##g")
+		if [[ -d $SOURCE ]]
+		then
+			SOURCE="$SOURCE""/"
+		fi
 		DESTINATION=$(get-destination "$SOURCE")
 		echo -e "Time: $TIME \nEvent: $EVENT\nFile: $SOURCE\nDestination: $DESTINATION"
 		
 		case $EVENT in
 		# The file/dir was either moved deleted from a watched directory
 		MOVED_FROM* | DELETE*)
-			# Remove the
+			# Remove the file on the destination
 			echo "I would now do $ rm $DESTINATION &"
+			rm "$DESTINATION" &
 			;;
 		MOVED_TO* | CREATE* | ATTRIB* | MODIFY*)
 			# Sync the new file/dir from the source to the destination
@@ -80,7 +89,8 @@ function sync-watch {
 			# because the script is still waiting for the call to return
 			# Problems caused by this (disconnection might cause syncing to an empty mountpoint)
 			# are far outweighted by benefits
-			echo "I would now do \$ rsync $RSYNC_OPTIONS $SOURCE $DESTINATION &"
+			echo "I would now do \$ rsync $RSYNC_OPTIONS ""$SOURCE" "$DESTINATION"" &"
+			rsync $RSYNC_OPTIONS "$SOURCE" "$DESTINATION" &
 			;;
 		*)
 			:
@@ -91,29 +101,35 @@ function sync-watch {
 }
 
 function unmount {
-	for directory in "${DIRECT_DIRECTORIES[@]}""${SYNC_DIRECTORIES[@]}"
+	for directory in "${DIRECT_DIRECTORIES[@]}"
 	do
 		echo "Unmounting $directory"
-		fusermount -uz /home/francisco/$directory
+		fusermount -uz "$LOCAL_ROOT$directory"
+	done
+	for directory in "${SYNC_DIRECTORIES[@]}"
+	do
+		echo "Unmounting $directory"
+		fusermount -uz "$SYNC_ROOT$directory"
 	done
 }
 
 function get-destination {
 	SOURCE=$1
-	if [[ $SOURCE == $LOCAL_ROOT* ]]
-	then
-		echo $SOURCE | sed "s#$LOCAL_ROOT#$SYNC_ROOT#g"
-	elif [[ $MOVED_TO == $SYNC_ROOT* ]]
+	if [[ $SOURCE == $SYNC_ROOT* ]]
 	then
 		echo $SOURCE | sed "s#$SYNC_ROOT#$LOCAL_ROOT#g"
+	elif [[ $SOURCE == $LOCAL_ROOT* ]]
+	then
+		echo $SOURCE | sed "s#$LOCAL_ROOT#$SYNC_ROOT#g"
 	fi
 }
 
+trap "unmount; exit" SIGHUP SIGINT SIGTERM SIGKILL
 read -s -p "Insert $REMOTE_USERNAME's password: " REMOTE_PASSWORD
 echo ""
 #mount-direct-dirs
 #mount-sync-dirs
-trap "unmount; exit" SIGHUP SIGINT SIGTERM SIGKILL
+initial-sync
 sync-watch
 unmount
 
