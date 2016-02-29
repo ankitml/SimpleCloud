@@ -6,8 +6,8 @@ SYNC_ROOT="/home/francisco/.Simplecloud/"
 REMOTE_ADDRESS="95.95.67.48"
 REMOTE_CONTAINER="/mnt/things/"
 DIRECT_DIRECTORIES=("Music" "Pictures" "Torrents" "Videos")
-#SYNC_DIRECTORIES=("Documents" "Torrents")
-SYNC_DIRECTORIES=("Torrents")
+SYNC_DIRECTORIES=("Documents" "Torrents")
+#SYNC_DIRECTORIES=("Torrents")
 RSYNC_OPTIONS="-rltuv --progress --exclude=\".Trash*\""
 SSHFS_OPTIONS="-o password_stdin -o allow_other -o reconnect -o ServerAliveInterval=60"
 EXCLUDE_FROM_SYNC="( *.goutputstream-* | *.swp | *\~ )"
@@ -54,26 +54,33 @@ function sync-sleep {
 }
 
 function sync-watch {
-	inotifywait -m -r -e create,delete,modify,attrib,move  --format "%T %e %w%f" --timefmt "%d/%m/%y %T" --exclude "$EXCLUDE_FROM_SYNC" $LOCAL_ROOT${SYNC_DIRECTORIES[*]} $SYNC_ROOT${SYNC_DIRECTORIES[*]} | while read FILE
+	# Start a cycle that reads each filesystem notification
+	inotifywait -m -r -e create,delete,modify,attrib,move  --format "%T %e %w%f" --timefmt "%d/%m/%y %T" --exclude "$EXCLUDE_FROM_SYNC" $LOCAL_ROOT${SYNC_DIRECTORIES[*]} $SYNC_ROOT${SYNC_DIRECTORIES[*]} | while read NOTIFICATION
 	do
-		#trap 'echo ola' INT
-		output=($FILE)
-		echo -e "Time: ${output[0]} ${output[1]}\nEvent: ${output[2]}\nFile: ${output[3]}"
-		case ${output[2]} in
+		# For each filesystem notification extract its timestamp,
+		# event string, path to the file/dir that caused the notification
+		# and get the equivalent file/dir for syncing
+		NOTIFICATION_LIST=($NOTIFICATION)
+		TIME=${NOTIFICATION_LIST[0]}" "${NOTIFICATION_LIST[1]}
+		EVENT=${NOTIFICATION_LIST[2]}
+		SOURCE=$(echo "$NOTIFICATION" | sed "s#\($EVENT\|$TIME\)##g" | sed "s#^[[:space:]]*##g")
+		DESTINATION=$(get-destination "$SOURCE")
+		echo -e "Time: $TIME \nEvent: $EVENT\nFile: $SOURCE\nDestination: $DESTINATION"
+		
+		case $EVENT in
+		# The file/dir was either moved deleted from a watched directory
 		MOVED_FROM* | DELETE*)
-			SOURCE="${output[3]}"
-			DESTINATION=$(get-destination $SOURCE)
-			echo "I would now do $ rm $DESTINATION"
+			# Remove the
+			echo "I would now do $ rm $DESTINATION &"
 			;;
 		MOVED_TO* | CREATE* | ATTRIB* | MODIFY*)
-			#MOVED_TO2=${MOVED_TO##( "$LOCAL_ROOT" | "$SYNC_ROOT" )}
-			#FILE=/home/user/src/prog.c
-			#echo "/home/user/src/prog.c" | sed -e 's#\(/user\|/user/src\)#/root#g'
-			#echo $MOVED_TO | sed "s#\($LOCAL_ROOT\|$SYNC_ROOT\)##g"
-			#echo $MOVED_TO | sed "s#\($LOCAL_ROOT\|$SYNC_ROOT\)##g"
-			SOURCE=${output[3]}
-			DESTINATION=$(get-destination $SOURCE)
-			echo "I would now do \$ rsync $RSYNC_OPTIONS $SOURCE $DESTINATION"
+			# Sync the new file/dir from the source to the destination
+			# !! It is very important the the rsync call is done asynchronously
+			# to avoid a case where new filesystem notifications aren't treated
+			# because the script is still waiting for the call to return
+			# Problems caused by this (disconnection might cause syncing to an empty mountpoint)
+			# are far outweighted by benefits
+			echo "I would now do \$ rsync $RSYNC_OPTIONS $SOURCE $DESTINATION &"
 			;;
 		*)
 			:
@@ -84,7 +91,6 @@ function sync-watch {
 }
 
 function unmount {
-	echo "unm"
 	for directory in "${DIRECT_DIRECTORIES[@]}""${SYNC_DIRECTORIES[@]}"
 	do
 		echo "Unmounting $directory"
@@ -107,7 +113,6 @@ read -s -p "Insert $REMOTE_USERNAME's password: " REMOTE_PASSWORD
 echo ""
 #mount-direct-dirs
 #mount-sync-dirs
-#sync-sleep
 trap "unmount; exit" SIGHUP SIGINT SIGTERM SIGKILL
 sync-watch
 unmount
