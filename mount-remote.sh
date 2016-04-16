@@ -2,7 +2,7 @@
 REMOTE_USERNAME="francisco"
 LOCAL_ROOT="/home/francisco/"
 SYNC_ROOT="/home/francisco/.Simplecloud/"
-REMOTE_ADDRESS="95.95.67.48"
+REMOTE_ADDRESS=""
 REMOTE_CONTAINER="/mnt/things/"
 DIRECT_DIRECTORIES=("Music" "Pictures" "Torrents" "Videos" "Comics")
 SYNC_DIRECTORIES=("Documents")
