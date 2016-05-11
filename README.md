@@ -1,10 +1,9 @@
 # SimpleCloud
-A cloud solution that only requires a SSH/SFTP server and client-side bash, rsync, sshfs and inotify-tools
+A cloud solution through SSH.
 
-Moving to Rust:
+Python dependencies:
 
-> Use the rsnotify filesystem watcher for Rust, which is cross-platform and uses the best implementation for each OS (https://github.com/passcod/rsnotify)
+* Watchdog: Filesystem watcher (http://pythonhosted.org/watchdog/)
+* Pathtools: Pattern matching and various utilities for file systems paths (https://github.com/gorakhargosh/pathtools)
+* Paramiko (http://docs.paramiko.org/en/1.17/)
 
-> Mount directories through Rust-FUSE in Linux (https://github.com/zargony/rust-fuse/)
-
-There doesn't seem to exist an implementation of SMB in Rust which is a big dealbreaker for Windows
