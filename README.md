@@ -4,4 +4,7 @@ A cloud solution that only requires a SSH/SFTP server and client-side bash, rsyn
 Moving to Rust:
 
 > Use the rsnotify filesystem watcher for Rust, which is cross-platform and uses the best implementation for each OS (https://github.com/passcod/rsnotify)
-> Find way to mount files remotely with SMB/SSHFS
+
+> Mount directories through Rust-FUSE in Linux (https://github.com/zargony/rust-fuse/)
+
+There doesn't seem to exist an implementation of SMB in Rust which is a big dealbreaker for Windows
