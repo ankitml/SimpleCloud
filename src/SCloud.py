@@ -5,7 +5,12 @@ import logging
 import time
 import getpass
 import shlex
+
+#Python 3
+#import configparser
+#Python 2
 import ConfigParser
+
 from watchdog.observers import Observer
 from watchdog.events import LoggingEventHandler
 
@@ -25,25 +30,49 @@ def watch():
 	except KeyboardInterrupt:
 		observer.stop()
 	observer.join()
-	
+
+def get_parameter_generic(config_path, config, section, option):
+	if not config.has_option(section, option):
+		#Python 3
+		#configuration = input(option + ": ")
+		#Python 2
+		configuration = raw_input(option + ": ")
+
+		config.set(section, option, configuration)
+		with open(config_path, "w") as configfile:
+			config.write(configfile)
+
+def get_parameter(config_path, config, section, option):
+	get_parameter_generic(config_path, config, section, option)
+	return config.get(section, option)
+
+def get_parameter_boolean(config_path, config, section, option):
+	get_parameter_generic(config_path, config, section, option)
+	return config.getboolean(section, option)
+
 def parse_config():
 	global username, address, remote_root, local_root, stream_dirs, ssh_options, use_password
-	
+
 	config_path = os.path.abspath("../SimpleCloud.conf")
+
+	#Python 3
+	#config = configparser.ConfigParser()
+	#Python 2
 	config = ConfigParser.ConfigParser()
+
 	config.read(config_path)
-	
-	username = config.get("Network", "user")
-	address = config.get("Network", "address")
-	stream_dirs = config.get("Directories",
+
+	username = 		get_parameter(config_path, config, "Network", "user")
+	address = 		get_parameter(config_path, config, "Network", "address")
+	stream_dirs = 	get_parameter(config_path, config, "Directories",
 		"stream_directories").split()
-	remote_root = config.get("Directories", "remote_root")
-	local_root = config.get("Directories", "local_root")
-	ssh_options = config.get("Network", "ssh_options")
-	if config.getboolean("Network", "password"):
-		use_password = True
+	remote_root = 	get_parameter(config_path, config, "Directories", "remote_root")
+	local_root = 	get_parameter(config_path, config, "Directories", "local_root")
+	ssh_options = 	get_parameter(config_path, config, "Network", "ssh_options")
+	use_password =	get_parameter_boolean(config_path, config, "Network", "password")
+	if use_password:
 		ssh_options+=" -o password_stdin"
-		
+	exit()
 
 def mount():
 	if use_password:
@@ -53,17 +82,17 @@ def mount():
 		remote_dir = remote_root+dir
 		local_dir = local_root+dir
 		sshfs_args = shlex.split("sshfs "+username+"@"+address+":"+remote_dir+" "+local_dir+" "+ssh_options)
-		print sshfs_args
+		print(sshfs_args)
 		
 		proc_echo = subprocess.Popen(["echo", password], stdout=subprocess.PIPE)
 		proc_sshfs = subprocess.Popen(sshfs_args, stdin=proc_echo.stdout, stdout=subprocess.PIPE)
 		proc_echo.wait()
 		output = proc_sshfs.communicate()
-		print output
+		print(output)
 
 def unmount():
 	for dir in stream_dirs:
-		print "Unmounting "+local_root+dir
+		print("Unmounting "+local_root+dir)
 		proc_unmount = subprocess.Popen(["fusermount","-uz", local_root+dir])
 
 global username, address, remote_root, local_root, stream_dirs, ssh_options, use_password
