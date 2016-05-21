@@ -9,6 +9,7 @@ Features:
 * Stateless: no databases means no state. No state means no timeline inconsistencies.
 * No re-invented protocols: SimpleCloud uses well-developed protocols to ensure connection, filesystem watching and syncing.
 * Sync and stream: the user chooses, for each directory, how he wants to access it. SimpleCloud allows both syncing files from a client to a server or direct access to the server's storage.
+* Minimal server dependencies: all of the work is done on the client. The server is only expected to posess a user system and the ability to create a filesystem connection through either SMB or SSH.
 
 Current state:
 
