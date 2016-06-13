@@ -2,11 +2,11 @@
 REMOTE_USERNAME="francisco"
 LOCAL_ROOT="/home/francisco/"
 SYNC_ROOT="/home/francisco/.Simplecloud/"
-REMOTE_ADDRESS=""
+REMOTE_ADDRESS="95.95.67.48"
 REMOTE_CONTAINER="/mnt/things/"
 DIRECT_DIRECTORIES=("Music" "Pictures" "Torrents" "Videos" "Comics")
 SYNC_DIRECTORIES=("Documents")
-RSYNC_OPTIONS="-rltuv --progress --exclude=\".Trash*\""
+RSYNC_OPTIONS="-rltuvP --progress --exclude=\".Trash*\""
 SSHFS_OPTIONS="-o password_stdin -o allow_other -o reconnect -o ServerAliveInterval=60"
 EXCLUDE_FROM_SYNC="( *.goutputstream-* | *.swp | *\~ )"
 
@@ -60,6 +60,8 @@ function mount-dirs {
 # Only AFTER this will any changes in sync directories
 # be noticed and treated
 function initial-sync {
+	trap "return" SIGHUP SIGINT SIGTERM SIGKILL
+	
 	for directory in ${SYNC_DIRECTORIES[@]}
 	do
 		SOURCE="$SYNC_ROOT$directory/"
@@ -86,7 +88,7 @@ function sync-watch {
 		# and get the equivalent file/dir for syncing
 		NOTIFICATION_LIST=($NOTIFICATION)
 		TIME=${NOTIFICATION_LIST[0]}" "${NOTIFICATION_LIST[1]}
-		EVENT=${NOTIFICATION_LIST[2]}
+		EVENT=${NOTIFICATION_LIST[2]}	
 		# Regex substitutions to obtain the complete path
 		# of the file that caused the notification
 		SOURCE=$(echo "$NOTIFICATION" | sed "s#\($EVENT\|$TIME\)##g" | sed "s#^[[:space:]]*##g")
@@ -153,8 +155,17 @@ function get-destination {
 
 trap "REMOTE_PASSWORD="kek"; unmount; exit" SIGHUP SIGINT SIGTERM SIGKILL
 mount-dirs
-initial-sync
-sync-watch
+if [[ "$1" != "--no-sync" ]]
+then 
+	initial-sync
+	sync-watch
+else
+	while true
+	do
+		sleep infinity &
+		wait
+	done
+fi
 unmount
 
 exit 0
