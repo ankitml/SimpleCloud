@@ -27,11 +27,14 @@ Cloud storage made simple.
 Unison will be the core of SimpleCloud. Since the last version (2.48) made large improvements on overall functionality, especially the filewatcher, and since it's rarely available on default repositories, here are the instructions for compiling from source:
 * Clone the source code:
 `git clone https://github.com/bachp/Unison.git`
+
 * Install all dependencies:
 `sudo dnf ocaml ctags ctags-etag redhat-rpm-config`
+
 * Build:
 `make`
 `sudo cp src/unison* /usr/local/bin/`
+
 * If you get the following error:
 `Fatal error: exception Scanf.Scan_failure("scanf: bad input at char number 4: 'looking for ':', found '$''")`
 Edit src/mkProjectInfo.ml from `let revisionString = "$Rev$";;` to `let revisionString = "$Rev: 388$";;`
