@@ -39,4 +39,5 @@ Unison will be the core of SimpleCloud. Since the last version (2.48) made large
 
 `Fatal error: exception Scanf.Scan_failure("scanf: bad input at char number 4: 'looking for ':', found '$''")`
 Edit src/mkProjectInfo.ml from `let revisionString = "$Rev$";;` to `let revisionString = "$Rev: 388$";;`
+
 [Source](http://lists.seas.upenn.edu/pipermail/unison-hackers/2010-January/001219.html)
