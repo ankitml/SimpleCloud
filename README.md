@@ -27,13 +27,13 @@ Cloud storage made simple.
 Unison will be the core of SimpleCloud. Since the last version (2.48) made large improvements on overall functionality, especially the filewatcher, and since it's rarely available on default repositories, here are the instructions for compiling from source:
 * Clone the source code:
 
-`git clone https://github.com/bachp/Unison.git`
+`$ git clone https://github.com/bachp/Unison.git`
 * Install all dependencies:
 
-`sudo dnf ocaml ctags ctags-etag redhat-rpm-config`
+`# dnf install ocaml ctags ctags-etag redhat-rpm-config`
 * Build:
 
-`make`
+`$ make`<br />
 `sudo cp src/unison* /usr/local/bin/`
 * If you get the following error:
 
@@ -64,9 +64,12 @@ Which will list partitions and mountpoints from each device. Note down which is 
 Understand that any contents you currently have on the storage disk will be unretrievable after this step. If there's one command on GNU/Linux that doesn't care about your feelings, it's dd.
 
 `# dd if=/dev/zero of=/dev/sda bs=10M status=progress`<br />
-`2621440000 bytes (2.6 GB, 2.4 GiB) copied, 11.0281 s, 238 MB/s` => this line gets updated
+`2621440000 bytes (2.6 GB, 2.4 GiB) copied, 11.0281 s, 238 MB/s` => this line gets updated<br />
+`95387+0 records in`
+`95386+0 records out`<br />
+`1000204886016 bytes (1.0 TB, 932 GiB) copied, 6244.26 s, 160 MB/s`
 
-This will read a stream of bytes containing only 0's into the storage drive. Again, please make sure to use the correct drive path. This process takes a long time for a 1TB drive. The bs=10M specifies that it should read 10 Megabyte blocks at a time and write them to the drive, which speeds things up at the expense of RAM. If you're serious about your security you can use of=/dev/urandom or even /dev/random instead, which read pseudo-random bytes instead of just zeros, but in turn it takes quite a while longer.
+This will read a stream of bytes containing only 0's into the storage drive. Again, please make sure to use the correct drive path. This process takes a long time for a 1TB drive (in our case 6244 seconds, which is about 1h 45m). The bs=10M specifies that it should read 10 Megabyte blocks at a time and write them to the drive, which speeds things up at the expense of RAM. If you're serious about your security you can use of=/dev/urandom or even /dev/random instead, which read pseudo-random bytes instead of just zeros, but in turn it takes quite a while longer.
 
 ### Encrypt the storage
 (If you want, you can use this steps without root permissions by using the command `chown <your username> /dev/sda`)
