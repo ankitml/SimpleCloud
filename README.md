@@ -63,6 +63,8 @@ Which will list partitions and mountpoints from each device. Note down which is 
 ### Clean the device
 Understand that any contents you currently have on the storage disk will be unretrievable after this step. If there's one command on GNU/Linux that doesn't care about your feelings, it's dd.
 
+`shred -vzn 0 /dev/sda`
+
 `# dd if=/dev/zero of=/dev/sda bs=10M status=progress`<br />
 `2621440000 bytes (2.6 GB, 2.4 GiB) copied, 11.0281 s, 238 MB/s` => this line gets updated<br />
 `95387+0 records in`
