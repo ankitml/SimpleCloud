@@ -21,6 +21,7 @@ Cloud storage made simple.
 * Watchdog: Filesystem watcher (http://pythonhosted.org/watchdog/)
 * Pathtools: Pattern matching and various utilities for file systems paths (https://github.com/gorakhargosh/pathtools)
 * Paramiko: SSH toolkit that allows SFTP mounting (http://docs.paramiko.org/en/1.17)/
+   * To install Paramiko on Red Hat systems you'll need the packages openssl-devel, python-devel and libffi-devel, and pip install paramiko will need to be ran with root permissions
 * PySMB: SMB/CIFS mounting (https://pypi.python.org/pypi/pysmb)
 
 ## Unison:
