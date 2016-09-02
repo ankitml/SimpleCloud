@@ -20,8 +20,8 @@ def start(observer):
 			time.sleep(1)
 	except KeyboardInterrupt:
 		print "This should print"
-		self.observer.stop()
-	self.observer.join()
+		observer.stop()
+	observer.join()
 			#while not tasks.empty():
 			#	task = tasks.get(block=True)
 			#	print task

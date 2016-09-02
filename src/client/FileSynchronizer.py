@@ -13,7 +13,8 @@ class FileSynchronizer (threading.Thread):
 
 	def run(self):
 		while True:
-			print "I am a thread"
+			#print "I am a thread"
 			time.sleep(1)
 			task = self.tasks.get(block=True)
-			#print "[Thread] Thread "+str(self.thread_id)+" would now do"+task
+			self.tasks.task_done()
+			print "[Thread] Thread "+str(self.thread_id)+" would now do"+task

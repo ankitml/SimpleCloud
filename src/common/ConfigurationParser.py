@@ -24,11 +24,11 @@ def get_parameter_boolean(config_path, config, section, option):
 	get_parameter_generic(config_path, config, section, option)
 	return config.getboolean(section, option)
 
-def parse_config(exec_path=os.path.abspath(sys.argv[0])):
+def parse_config(exec_path=os.path.abspath(sys.argv[0]), config_path=os.path.abspath(os.path.join(sys.argv[0], "../SimpleCloud.conf"))):
 	#global username, address, remote_root, local_root, stream_dirs, ssh_options, use_password
 	#exec_path = os.path.abspath(sys.argv[0])
 	configuration = {}
-	config_path = os.path.abspath( os.path.join(exec_path, "../../../SimpleCloud.conf"))
+	#config_path = os.path.abspath( os.path.join(exec_path, "../../../SimpleCloud.conf"))
 	configuration["sync_path"] = sync_path = os.path.abspath( os.path.join(exec_path, "../../sync/"))
 	print "Config path: "+config_path
 	print "Sync path: "+sync_path
