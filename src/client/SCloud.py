@@ -24,15 +24,16 @@ from FileSynchronizer import FileSynchronizer
 from TaskReceiver import TaskReceiver
 
 def get_config():
-	global parameters
+	global parameters, tasks
 	parameters = ConfigurationParser.parse_config()
+	tasks = Queue.Queue()
 	print "Parameters: "
 	print parameters
 
 def connect():
-	global receiver
-	receiver = TaskReceiver(parameters["host"], parameters["port"])
-	receiver.connect()
+	global receiver, tasks
+	receiver = TaskReceiver(parameters["host"], parameters["port"], tasks)
+	receiver.start()
 
 def watch():
 	global observer
@@ -143,8 +144,7 @@ def unmount():
 	#	SSHFSmounter.unmount(dir["mountpoint"])
 	
 
-global parameters, observer, receiver
-tasks = Queue.Queue()
+global parameters, observer, receiver, tasks
 
 #1 - get config
 #2 - create task queue

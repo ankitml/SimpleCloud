@@ -41,6 +41,7 @@ def parse_config(exec_path=os.path.abspath(sys.argv[0]), config_path=os.path.abs
 
 	configuration["user"] 			= config_file.get("Network","user") #get_parameter(config_path, config, "Network", "user")
 	configuration["host"]		  	= config_file.get("Network", "host")
+	configuration["port"] 			= int(config_file.get("Network", "port"))
 	configuration["ssh_options"]  	= config_file.get("Network", "ssh_options")
 	configuration["use_password"] 	= config_file.getboolean("Network", "use_password")
 	
