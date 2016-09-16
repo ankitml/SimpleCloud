@@ -148,7 +148,6 @@ def unmount():
 			print(error)
 	#for dir in parameters["sync_dirs"]:
 	#	SSHFSmounter.unmount(dir["mountpoint"])
-	
 
 global parameters, observer, receiver, tasks
 

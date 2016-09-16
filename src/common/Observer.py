@@ -6,9 +6,10 @@ def getObserver(sync_dirs, task_queue):
 	observer = Observer()
 	for sync in sync_dirs:
 		local = sync["local"]
-		mountpoint = sync["mountpoint"]
+		remote = sync["remote"]
+		print("[Observer] I observe "+local+" and send to "+remote)
 
-		handler = FileSystemEventHandler(local, mountpoint, task_queue)
+		handler = FileSystemEventHandler(local, remote, task_queue)
 		observer.schedule(handler, local, recursive=True)
 	return observer
 

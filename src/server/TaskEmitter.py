@@ -1,6 +1,8 @@
 import socket
 import ssl
+import time
 import threading
+import pickle
 
 #Server
 class TaskEmitter(threading.Thread):
@@ -12,6 +14,7 @@ class TaskEmitter(threading.Thread):
 		self.TCPsocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 		self.TCPsocket.bind((host, port))
 		self.TCPsocket.listen(10)
+		self.observe = False
 		
 		#self.SSLsocket = ssl.wrap_socket(self.TCPsocket, ssl_version=ssl.PROTOCOL_TLSv1)#, ciphers="ADH-AES256-SHA")
 		#self.SSLsocket.bind((host, port))
@@ -27,19 +30,24 @@ class TaskEmitter(threading.Thread):
 		print("Connected to " + str(self.client_address))
 		self.register_client()
 
-		while True:
+		while not self.observe:
+			time.sleep(1)
+
+		while self.observe:
 			data = self.tasks.get(block=True)
+			self.tasks.task_done()
 			print("[Emitter] Received " + str(data) + " from task queue")
-			self.client_connection.sendall(data)
+			self.client_connection.sendall(pickle.dumps(data))
 
 	def register_client(self):
-		sync_dirs = self.client_connection.recv(1024)
+		sync_dirs = pickle.loads(self.client_connection.recv(1024))
 		self.tasks.put(sync_dirs)
 		
 	def close(self):
 		print("Closing server")
 		#self.SSLsocket.close()
 		self.TCPsocket.close()
+
 
 # def test():
 # 	host = "localhost"

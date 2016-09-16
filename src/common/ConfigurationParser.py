@@ -53,7 +53,7 @@ def parse_config(exec_path=os.path.abspath(sys.argv[0]), config_path=os.path.abs
 	configuration["sync_dirs"] = []
 	for remote,local in config_file.items("Sync Directories"):
 		#sync_path = configuration["sync_path"]
-		mountpoint = os.path.abspath(os.path.join(sync_path, os.path.relpath(remote, "/")))
-		configuration["sync_dirs"].append({ "path" : remote, "mountpoint" : sync_path+remote, "local" : local })
+		#mountpoint = os.path.abspath(os.path.join(sync_path, os.path.relpath(remote, "/")))
+		configuration["sync_dirs"].append({ "remote" : remote, "local" : local })
 	
 	return configuration

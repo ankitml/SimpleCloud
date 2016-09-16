@@ -13,5 +13,5 @@ class FileSynchronizer (threading.Thread):
 		while self.keep_running:
 			time.sleep(1)
 			task = self.tasks.get(block=True)
-			print("[Synchronizer] Thread " + str(self.thread_id) + " would now do " + task)
+			print("[Synchronizer] Thread " + str(self.thread_id) + " would now do " + str(task))
 			self.tasks.task_done()

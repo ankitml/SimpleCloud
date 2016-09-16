@@ -14,8 +14,8 @@ class FileSystemEventHandler(FileSystemEventHandler_super):
     #    print "An event of type " + event.event_type + " occured on " + ("directory " if event.is_directory else "file ") + event.src_path
 	def on_modified(self, event):
 		print("[Handler] Modified: " + event.src_path)
-		#relativepath = self.rootPattern.sub('', event.src_path)
-		#relativePath = os.path.relpath(event.src_path, self.localRoot)
+		# relativepath = self.rootPattern.sub('', event.src_path)
+		# relativePath = os.path.relpath(event.src_path, self.localRoot)
 		#sendTo = os.path.join(self.remoteRoot, relativePath)
 		sendTo = self.localPathToRemote(event.src_path)
 		print("[Handler] Sending to " + sendTo)

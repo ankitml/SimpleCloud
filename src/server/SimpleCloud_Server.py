@@ -27,14 +27,16 @@ def connect():
     global emitter, tasks
     emitter = TaskEmitter(parameters["host"], parameters["port"], tasks)
     emitter.start()
-    print("Done with emitter")
 
 def watch():
     global observer
-    parameters["sync_dirs"] = str(tasks.get(block=True))
-    print("Received sync directories:"+parameters["sync_dirs"])
+    parameters["sync_dirs"] = tasks.get(block=True)
+    tasks.task_done()
+    emitter.observe = True
+
+    for dir in parameters["sync_dirs"]:
+        print("Observe " + dir["remote"] + " and send to " + dir["local"])
     observer = Observer.getObserver(parameters["sync_dirs"], tasks)
-    print("Got observer")
     observer.start()
     try:
         while True:

@@ -2,6 +2,7 @@ import socket
 import ssl
 import threading
 import time
+import pickle
 
 #Client
 class TaskReceiver(threading.Thread):
@@ -27,17 +28,27 @@ class TaskReceiver(threading.Thread):
 		try:
 			self.TCPsocket.connect((self.host, self.port))
 			print("[Receiver] Connected to " + str(self.host) + ":" + str(self.port))
-			self.TCPsocket.send(self.sync_dirs[0]["mountpoint"])
+			self.register()
+
 		except ConnectionRefusedError as error:
 			print("Server not available at " + self.host + ":" + str(self.port))
 			return
 
 		while True:
-			data = self.TCPsocket.recv(1024)
+			data = pickle.loads(self.TCPsocket.recv(1024))
 			if not data: break
-			print("[Receiver] Inserting "+data+" into task queue")
+			print("[Receiver] Inserting "+str(data)+" into task queue")
 			self.tasks.put(data, block=True)
 
+	def register(self):
+		remote_dirs = []
+		for dir in self.sync_dirs:
+			remote_dirs.append({
+				"local": dir["remote"],
+				"remote": dir["local"]
+			})
+		remote_dirs = pickle.dumps(remote_dirs)
+		self.TCPsocket.sendall(remote_dirs)
 		
 	def close(self):
 		print("Closing client")
