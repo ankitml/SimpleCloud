@@ -11,7 +11,7 @@ def mount (host, path, mountpoint, user=None, ssh_options=None):
 		command += " " + ssh_options
 	#print command
 	command = shlex.split(command)
-	print "Mounting " + host+":"+path + " in " + mountpoint
+	print("Mounting " + host+":"+path + " in " + mountpoint)
 	try:
 		mkdir_recursive(mountpoint)
 		subprocess.check_output(command)

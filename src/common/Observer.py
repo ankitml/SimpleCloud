@@ -1,6 +1,6 @@
 import time
 from watchdog.observers import Observer
-from EventHandler import FileSystemEventHandler
+from .EventHandler import FileSystemEventHandler
 
 def getObserver(sync_dirs, task_queue):
 	observer = Observer()
@@ -16,10 +16,10 @@ def start(observer):
 	observer.start()
 	try:
 		while True:
-			print "Watching, waiting"
+			print("Watching, waiting")
 			time.sleep(1)
 	except KeyboardInterrupt:
-		print "This should print"
+		print("This should print")
 		observer.stop()
 	observer.join()
 			#while not tasks.empty():
