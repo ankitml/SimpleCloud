@@ -2,9 +2,9 @@
 REMOTE_USERNAME="francisco"
 LOCAL_ROOT="/home/francisco/"
 SYNC_ROOT="/home/francisco/.Simplecloud/"
-REMOTE_ADDRESS="95.95.67.48"
+#REMOTE_ADDRESS="95.95.67.48"
 REMOTE_CONTAINER="/mnt/things/"
-DIRECT_DIRECTORIES=("Music" "Pictures" "Torrents" "Videos" "Comics")
+#DIRECT_DIRECTORIES=("Music" "Pictures" "Torrents" "Videos" "Comics")
 SYNC_DIRECTORIES=("Documents")
 RSYNC_OPTIONS="-rltuvP --progress --exclude=\".Trash*\""
 SSHFS_OPTIONS="-o password_stdin -o allow_other -o reconnect -o ServerAliveInterval=60"

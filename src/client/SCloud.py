@@ -19,10 +19,6 @@ from .FileSynchronizer import FileSynchronizer
 from .TaskReceiver import TaskReceiver
 from common import ConfigurationParser, Observer
 
-#import src.common.Observer as Observer
-#from src.client.FileSynchronizer as FileSynchronizer
-#from src.client.TaskReceiver import TaskReceiver
-
 def get_config():
 	global parameters, tasks
 	parameters = ConfigurationParser.parse_config()
@@ -34,6 +30,7 @@ def connect():
 	host = parameters["host"]
 	port = parameters["port"]
 	receiver = TaskReceiver(host, port, tasks, parameters["sync_dirs"])
+
 	receiver.start()
 	time.sleep(1)
 
@@ -52,6 +49,8 @@ def watch():
 		synchronizer.start()
 		synchronizers.append(synchronizer)
 
+	receiver.watch_socket.set()
+
 	observer = Observer.getObserver(parameters["sync_dirs"], tasks)
 	observer.start()
 	try:
@@ -64,6 +63,7 @@ def watch():
 		observer.stop()
 	observer.join()
 	print("Stopping task receiver")
+	#receiver.watch_socket.clear()
 	receiver.join()
 	print("Stopping queue")
 	tasks.join()
@@ -73,30 +73,6 @@ def watch():
 		synchronizer.keep_running=False
 		synchronizer.join(timeout=1)
 	print("Here")
-	
-	# for sync in parameters["sync_dirs"]:
-	# 	local = sync["local"]
-	# 	mountpoint = sync["mountpoint"]
-	#
-	# 	handler1 = FileSystemEventHandler(local, mountpoint, tasks)
-	# 	observer.schedule(handler1, local, recursive=True)
-	#
-	# 	#handler2 = FileSystemEventHandler(mountpoint, local, tasks)
-	# 	#observer.schedule(handler2, mountpoint, recursive=True)
-		
-	# observer.start()
-	#
-	# try:
-	# 	while True:
-	# 		time.sleep(1)
-	# except KeyboardInterrupt:
-	# 	observer.stop()
-	# 	observer.join()
-	# 	for synchronizer in synchronizers:
-	# 		synchronizer.join()
-	# 	while not tasks.empty():
-	# 		task = tasks.get(block=True)
-	# 		print task
 
 def mount():
 	host = parameters["host"]
@@ -113,31 +89,6 @@ def mount():
 		print(error)
 		unmount()
 		exit(1)
-
-def self_mount():
-	proc_echo = None
-	
-	if use_password:
-		password = getpass.getpass("Insert %s's password on %s: " %(username, address))
-		proc_echo = subprocess.Popen(["echo", password], stdout=subprocess.PIPE)
-	
-	for dir in parameters["stream_dirs"]:
-		print("This stream dir: "+dir)
-		remote_dir = remote_root+dir
-		local_dir = local_root+dir
-		sshfs_args = shlex.split("sshfs "+username+"@"+address+":"+
-			remote_dir+" "+local_dir+" "+ssh_options)
-		print(sshfs_args)
-		if use_password:
-			pass
-			#proc_sshfs = subprocess.Popen(sshfs_args, stdin=proc_echo.stdout, stdout=subprocess.PIPE)
-			#proc_echo.wait()
-			#output = proc_sshfs.communicate()
-			#print(output)
-		else:
-			proc_sshfs = subprocess.call(sshfs_args)
-			output = proc_sshfs.communicate()
-			print(output)
 
 def unmount():
 	#sync_path = 
