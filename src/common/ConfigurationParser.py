@@ -34,9 +34,6 @@ def parse_config(exec_path=os.path.abspath(sys.argv[0]), config_path=os.path.abs
 	print("Config path: "+config_path)
 	print("Sync path: "+sync_path)
 
-	#Python 3
-	#config = configparser.ConfigParser()
-	#Python 2
 	config_file = configparser.ConfigParser()
 	config_file.read(config_path)
 
