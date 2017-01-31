@@ -1,0 +1,4 @@
+Dependencies:
+python-watchdog (http://pythonhosted.org/watchdog/)
+python-pathtools (https://github.com/gorakhargosh/pathtools)
+python-paramiko (http://docs.paramiko.org/en/1.17/)

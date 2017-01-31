@@ -2,6 +2,7 @@
 import os
 import logging
 import time
+import paramiko
 
 # Multi-threading tools
 from queue import Queue
@@ -21,7 +22,7 @@ def register_client():
 
     emitters = []
     registrator = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    registrator.bind((parameters["host"], parameters["port"]))
+    registrator.bind(('', parameters["port"]))
     registrator.listen(10)
 
     client_connection, client_address = registrator.accept()
