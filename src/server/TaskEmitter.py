@@ -5,12 +5,14 @@ import threading
 import pickle
 import queue
 
-#Server
+
+# Server
 class TaskEmitter(threading.Thread):
-	def __init__(self, client_connection, task_queue):
+	def __init__(self, client_connection, task_queue, client_queue):
 		threading.Thread.__init__(self)
-		self.client_connection = client_connection
+		#self.client_connection = client_connection
 		self.tasks = task_queue
+		self.clients = client_queue
 		self.watch_queue = threading.Event()
 		#self.TCPsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		#self.TCPsocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

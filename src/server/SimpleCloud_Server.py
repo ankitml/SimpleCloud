@@ -10,6 +10,8 @@ from queue import Queue
 from src.common import ConfigurationParser
 import src.common.Observer as Observer
 from .TaskEmitter import TaskEmitter
+from src.server.ClientRegistrar import ClientRegistrar
+from src.server.ClientRegistry import ClientRegistry
 
 def get_config():
     global parameters, tasks
@@ -17,26 +19,20 @@ def get_config():
     print("Parameters: " + str(parameters))
 
 def register_client():
-    import socket, pickle
-    global emitters
-
+    global emitters, clients
     emitters = []
-    registrator = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    registrator.bind(('', parameters["port"]))
-    registrator.listen(10)
+    registry = ClientRegistry
 
-    client_connection, client_address = registrator.accept()
-    print("[Emitter] Connected to " + str(client_address))
-
-    sync_dirs = pickle.loads(client_connection.recv(1024))
-    print("Sync dirs: "+str(sync_dirs))
+    registrar = ClientRegistrar(
+        parameters["host"], parameters["port"], clients,
+        parameters["private_key_file"], parameters["authorized_keys_file"])
 
     emitter = TaskEmitter(client_connection, tasks)
     emitter.start()
     emitters.append(emitter)
     emitter.watch_queue.set()
 
-    watch(sync_dirs)
+    watch_queues(sync_dirs)
 
 def connect():
     global emitter, tasks
@@ -62,8 +58,9 @@ def watch(sync_dirs):
     observer.join()
     print("Here")
 
-global parameters, observer, emitters, tasks
+global parameters, observer, emitters, tasks, clients
 tasks = Queue()
+clients = Queue()
 
 get_config()
 register_client()
