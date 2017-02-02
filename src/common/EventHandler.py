@@ -19,13 +19,16 @@ class FileSystemEventHandler(FileSystemEventHandler_super):
 
 	def on_modified(self, event):
 		if not event.is_directory:
-			self.on_deleted(event)
+			self.handle_modification(event)
 
 	def on_created(self, event):
 		if event.is_directory:
-			self.on_deleted(event)
+			self.handle_modification(event)
 
 	def on_deleted(self, event):
+		self.handle_modification(event)
+
+	def handle_modification(self, event):
 		event.dest_path = self.localPathToRemote(event.src_path) + ("/" if event.is_directory else "")
 		self.tasks.put(event, block=True)
 

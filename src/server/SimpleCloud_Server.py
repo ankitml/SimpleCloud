@@ -8,7 +8,7 @@ import paramiko
 from queue import Queue
 
 from src.common import ConfigurationParser
-import src.common.Observer as Observer
+from watchdog.observers import Observer
 from .TaskEmitter import TaskEmitter
 from src.server.ClientRegistrar import ClientRegistrar
 from src.server.ClientRegistry import ClientRegistry

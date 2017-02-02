@@ -1,6 +1,21 @@
 import time
-from watchdog.observers import Observer
+from watchdog.observers import Observer as Observer_super
 from .EventHandler import FileSystemEventHandler
+
+class Observer(Observer_super):
+	def __init__(self):
+		Observer_super.__init__(self)
+
+		# sync_dirs, task_queue):
+		# for sync in sync_dirs:
+		# 	local = sync["local"]
+		# 	remote = sync["remote"]
+		# 	print("[Observer] I observe " + local + " and send to " + remote)
+        #
+		# 	handler = FileSystemEventHandler(local, remote, task_queue)
+		# 	self.schedule(handler, local, recursive=True)
+
+
 
 def getObserver(sync_dirs, task_queue):
 	observer = Observer()

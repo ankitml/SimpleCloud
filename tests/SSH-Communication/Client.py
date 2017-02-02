@@ -1,4 +1,5 @@
 import paramiko
+import pickle
 
 #private_key = paramiko.RSAKey(filename="/home/francisco/.ssh/fake_key")
 private_key = paramiko.RSAKey(filename="/home/francisco/.ssh/id_rsa")
@@ -14,6 +15,10 @@ client.connect('localhost', port=3509, pkey=private_key)
 transport = client.get_transport()
 channel = transport.open_channel(kind="session")
 
-channel.send("ola")
-channel.send("adeus")
-transport.close()
+while True:
+    data = input("What would you like to send to the server?\n  > ")
+    datab = pickle.dumps(data)
+    channel.send(datab)
+    responseb = channel.recv(1024*1024)
+    response = pickle.loads(responseb)
+    print("Server replied with:\n  "+response)
