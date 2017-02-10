@@ -8,8 +8,7 @@ class FileSystemEventHandler(FileSystemEventHandler_super):
 		self.localRoot = os.path.abspath(localRoot)
 		self.remoteRoot = os.path.abspath(remoteRoot)
 		self.tasks = tasks
-
-		print("[Handler] My root is " + self.localRoot + " and I send to " + remoteRoot)
+		#print("[Handler] My root is " + self.localRoot + " and I send to " + remoteRoot)
 
 	def on_moved(self, event):
 		source = self.localPathToRemote(event.src_path) + ("/" if event.is_directory else "")
@@ -31,6 +30,7 @@ class FileSystemEventHandler(FileSystemEventHandler_super):
 	def handle_modification(self, event):
 		event.dest_path = self.localPathToRemote(event.src_path) + ("/" if event.is_directory else "")
 		self.tasks.put(event, block=True)
+		#print("Found an event on "+event.src_path)
 
 	# def on_any_event(self, event):
 		# print("[Handler] Modified: " + event.src_path)
