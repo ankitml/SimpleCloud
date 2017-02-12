@@ -11,7 +11,7 @@ from src.common import ConfigurationParser
 from watchdog.observers import Observer
 from .TaskEmitter import TaskEmitter
 from src.server.ClientRegistrar import ClientRegistrar
-from src.server.ClientRegistry import ClientRegistry
+from src.server.ClientIndex import ClientIndex
 
 def get_config():
     global parameters, tasks
@@ -21,7 +21,7 @@ def get_config():
 def register_client():
     global emitters, clients
     emitters = []
-    registry = ClientRegistry
+    registry = ClientIndex
 
     registrar = ClientRegistrar(
         parameters["host"], parameters["port"], clients,

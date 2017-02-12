@@ -76,6 +76,27 @@ class Server(threading.Thread):
                     break
             server.close()
 
+def getChannel():
+    server_event = threading.Event()
+    num_comm = 0
+
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server_socket.bind(('localhost', 3509))
+    server_socket.listen(100)
+
+    print("[Server] All set, listening for SSH connections...")
+    client_socket, address = server_socket.accept()
+
+    print("[Server] Received client connection from " + str(address))
+    server = paramiko.Transport(client_socket)
+    server.add_server_key(server_key)
+
+    paramiko_server = ParamikoServer()
+    server.start_server(server=paramiko_server, event=server_event)
+    channel = server.accept(20)
+    return channel
+
 def start():
     server = Server()
     server.start()

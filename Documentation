@@ -1,0 +1,27 @@
+I'm creating this file mostly to keep track of what happens during a session
+
+== Important ==
+-Do not create a thread per client to watch the channel, it scales poorly when reaching C10K-like dimensions. Instead rely on the selectors module
+-Besides this, the registrar will have to watch some sort of queue or something thread-safe for info regarding new arrivals and register them
+-An alternative that is better in performance, but worse in OOP, is having the registrar also contain the server socket and use a selector for client channels + server sockets
+-There is no easy way around this. The better-performing way is a single selector for all client sockets. The structure that handles select() has to be the same one that handles register() and unregister(), we can't have outside threads unregistering channels while a select() is blocking
+-Also we need to ensure the Frankensteinian extension of Paramiko's Channel that is Client actually works because that socket object has to store data
+
+== Initialization ==
+1 - Server starts up
+2 - Creates Observer watching nothing
+3 - Creates Registrar, awaits clients
+4 - Client approaches Registrar, negotiate SSH tunnel
+5 - If negotiation is successful, Registrar registers Client in Index identified by a unique ID
+6 - Client sends Registrar a list of directories to watch through it
+    [ dir1, dir2, dir3, ... ] where each dir# is a string with an absolute path
+7 - Registrar asks Observer to watch those directories
+8 - For each directory, Observer creates a new FilesystemEventHandler and schedules a new Watch
+
+== Event occurs server-side ==
+1 - Event is set off by Observer, calls every EventHandler for that watch
+2 - EventHandler inserts (ID, Event) into queue shared with Index
+    Index is on a loop, querying every Client for socket life and then blocking on the task queue (1s?)
+    If a socket dies, acquire that client's lock then remove it from the dictionary
+3 - Index gets() a (ID, Event) pair from queue, gets the corresponding Client for that ID and acquires() its lock
+    Sends the Event (pickle dumped) through the socket then releases() its lock

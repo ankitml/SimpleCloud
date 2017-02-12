@@ -34,7 +34,7 @@ class WatchdogTests(unittest.TestCase):
             self.assertEqual(task.src_path,local_dir+filename)
             self.assertEqual(task.dest_path, remote_dir+filename)
 
-    # Tests whether it's possible to add a new Handler to an already scheduled watch
+    # It should be possible to add a new Handler to an already scheduled watch
     def testHandlerAdding(self):
         fake_handle="I am a fake handler, don't mind me!"
         class FakeHandler(FileSystemEventHandler):
@@ -52,6 +52,31 @@ class WatchdogTests(unittest.TestCase):
             except queue.Empty:
                 break
             self.assertEqual(task, fake_handle)
+
+    # A Handler blocking on one event (ex: inserting into a busy queue)
+    # should not prevent handling of further events
+    def testHandlerHanging(self):
+        class HangingHandler(FileSystemEventHandler):
+            def handle_modification(self, event):
+                print("Handler hanging...")
+                time.sleep(3)
+                print("Handler dispatching")
+                super().handle_modification(event)
+
+        for i in range(5):
+            with open(local_dir+filename, "w") as local_file:
+                local_file.write("Write #"+str(i))
+            time.sleep(0.5)
+        #time.sleep(6)
+        j=0
+        while True:
+            try:
+                task = self.tasks.get(timeout=4)
+                self.assertEquals(task.src_path, local_dir+filename)
+                j += 1
+            except queue.Empty: break
+
+        self.assertEquals(j, 5)
 
     # Scheduling a new watch while another one is running
     # In this test, each write should set off 2 events (open+close) as seen on the next test
@@ -74,13 +99,35 @@ class WatchdogTests(unittest.TestCase):
             self.assertEqual(task.dest_path, local_dir + filename)
 
         with open(local_dir + filename, "w") as local_file:
-            local_file.write("Going thrice")
+            local_file.write("Going thrice") # Writing to the local file still works
         l2 = empty_tasks(self.tasks)
         self.assertEqual(len(l2), 1)  # Single event
         for task in l2:
             self.assertEqual(task.src_path, local_dir + filename)
             self.assertEqual(task.dest_path, remote_dir + filename)
 
+    # It should be possible to remove a scheduled watch
+    def testWatchRemoval(self):
+        handler2 = FileSystemEventHandler(localRoot=remote_dir, remoteRoot=local_dir, tasks=self.tasks)
+        watch2 = self.observer.schedule(event_handler=handler2, path=remote_dir, recursive=True)
+        for client in [ {"path":local_dir+filename, "watch":self.watch},
+                      {"path":remote_dir+filename, "watch":watch2} ]:
+            with open(client["path"], "w") as file:
+                file.write("This will make an event")
+            time.sleep(0.5)
+            task = self.tasks.get(timeout=1)
+            self.assertEquals(task.src_path, client["path"])
+
+            self.observer.unschedule(client["watch"])
+            with open(local_dir+filename, "w") as local_file:
+                local_file.write("This won't")
+            self.assertRaises(queue.Empty, self.tasks.get, timeout=1)
+
+
+
+        # Each open() and each close() should produce an event
+    # They are sometimes squashed into a single event if done
+    # Quickly enough (i.e. "with open(file) as f: f.write()")
     def testEventsPerWrite(self):
         local_file = open(local_dir+filename, "w")
         self.assertTrue(len(empty_tasks(self.tasks)) == 1) # Opening sets off an event

@@ -5,6 +5,10 @@ from .EventHandler import FileSystemEventHandler
 class Observer(Observer_super):
 	def __init__(self):
 		Observer_super.__init__(self)
+		self.watches = []
+
+	def addWatchForClient(self, path, id):
+		handler = FileSystemEventHandler()
 
 		# sync_dirs, task_queue):
 		# for sync in sync_dirs:
@@ -14,8 +18,6 @@ class Observer(Observer_super):
         #
 		# 	handler = FileSystemEventHandler(local, remote, task_queue)
 		# 	self.schedule(handler, local, recursive=True)
-
-
 
 def getObserver(sync_dirs, task_queue):
 	observer = Observer()
@@ -41,6 +43,7 @@ def start(observer):
 			#while not tasks.empty():
 			#	task = tasks.get(block=True)
 			#	print task
+
 def stop(observer):
 	observer.stop()
 	observer.join()
