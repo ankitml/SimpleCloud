@@ -1,6 +1,11 @@
-import asyncssh, asyncio, threading, time
-from tests.Registrar.SSHServer import SSHServer
+import asyncio
+import asyncssh
 import paramiko
+import threading
+import time
+
+from tests.SSHCommunication.asyncSSH.SSHServer import SSHServer
+
 PORT=3509
 SERVER_KEYS = CLIENT_KEYS = ["/home/francisco/.ssh/id_rsa"]
 AUTHORIZED_KEYS = ["/home/francisco/.ssh/authorized_keys"]
