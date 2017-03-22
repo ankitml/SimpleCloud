@@ -1,5 +1,7 @@
-import paramiko
 import pickle
+
+import paramiko
+
 
 #private_key = paramiko.RSAKey(filename="/home/francisco/.ssh/fake_key")
 def getChannel():

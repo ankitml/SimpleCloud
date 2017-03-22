@@ -1,22 +1,30 @@
-import asyncssh, asyncio, threading
+import asyncssh, asyncio
 
-class SSHServer(asyncssh.SSHServer):
-    def connection_made(self, connection):
-        print('SSH connection received from '+
-              connection.get_extra_info('peername')[0])
-        self.connection = connection
-    def connection_lost(self, exc):
-        print("[SSHServer] Lost connection"+(" poorly: "+str(exc) if exc else ""))
-    def public_key_auth_supported(self):
-        return True
-    def begin_auth(self, username):
-        print("Authenticating user "+username)
-        return True
-    def handle_session(stdin, stdout, stderr):
-        print("Got a session")
-        stdout.write('Welcome to my SSH server, '+
-                     stdout.channel.get_extra_info('username')+'\n')
-        stdout.channel.exit(0)
+# class SSHServerSession(asyncssh.SSHServerSession):
+#     def __init__(self):
+#         self.chan = None
+#     def connection_made(self, chan):
+#         print('Creating channel')
+#         self.chan = chan
+#     def session_started(self):
+#         print('Began session')
+#         self.chan.write('Welcome!')
+#     def data_received(self, data, datatype):
+#         print('Received: ' + data)
+#     def connection_lost(self, exc):
+#         print("Lost session " + (" poorly: " + str(exc) if exc else ""))
+# class SSHServer(asyncssh.SSHServer):
+#     def public_key_auth_supported(self):
+#         return True
+#     def session_requested(self):
+#         print("Session requested")
+#         return SSHServerSession()
+    #def connection_made(self):
+    #    print('Connection made')
+
+        # stdout.write('Welcome to my SSH server, '+
+        #              stdout.channel.get_extra_info('username')+'\n')
+        # stdout.channel.exit(0)
 
 # class Server(threading.Thread):
 #     def __init__(self, host, port, server_keys, authorized_keys):
@@ -44,16 +52,34 @@ class SSHServer(asyncssh.SSHServer):
 #     await asyncssh.create_server(SSHServer, host=host,
 #                                  port=port, server_host_keys=server_keys,
 #                                  authorized_client_keys=authorized_clients)
-def handle_session(stdin, stdout, stderr):
-    print("Got a session")
-    stdout.write('Welcome to my SSH server, ' +
-                 stdout.channel.get_extra_info('username') + '\n')
-    stdout.channel.exit(0)
+
+class Client:
+    _clients = []
+    def __init__(self, stdin, stdout):
+        self._stdin=stdin
+        self._stdout=stdout
+        Client._clients.append(self)
+        sockinfo = stdout.get_extra_info('peername')
+        self.username=stdout.get_extra_info('username')
+        self.address=str(sockinfo[0])
+        print('New client: ' + self.username + '@' + self.address+', currently have '+str(len(Client._clients)))
+    @classmethod
+    async def add_client(cls, stdin, stdout, stderr):
+        client=cls(stdin, stdout)
+        stdout.write('Welcome!\n')
+        await client.handle_client()
+    async def handle_client(self):
+        try:
+            async for line in self._stdin:
+                print('['+self.username+'] '+line.strip('\n'))
+        except asyncssh.BreakReceived:
+            pass
+        Client._clients.remove(self)
+        print(self.username + ' has left')
 
 async def create_server(host, port, server_keys, authorized_clients):
     await asyncssh.listen(host=host, port=port, server_host_keys=server_keys,
-                        authorized_client_keys=authorized_clients,
-                        session_factory=handle_session)
+                        authorized_client_keys=authorized_clients, session_factory=Client.add_client)
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
