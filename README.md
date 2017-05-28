@@ -7,14 +7,16 @@ Cloud storage made simple.
 ## Current state:
 * SimpleCloud is on a development hiatus. I develop it alone and currently have very little free time.
 * The current codebase is not working yet.
-* The Registry is currently the most work-demanding component. Were trying to adapt an async mechanism (async-ssh) for it for maximum efficiency, but it's proving to be very demanding, and there's almost nothing to base it on. It's also a very language-specific implementation. If this drags on, a one-thread-per-client Registry will be developed as a temporary solution using Paramiko.
+* The Registry is currently the most work-demanding component. Were trying to adapt an async mechanism (async-ssh) for it for maximum efficiency, but it's proving to be very demanding, and there's almost nothing to base it on. It's also a very language-specific implementation. If this drags on, a one-thread-per-client Registry will be developed as a temporary solution using Paramiko. **Also the latest testing showed that async-ssh is unable to notice when a SSH channel has been improperly closed, which would be a dealbreaker to its use**
 
 ## Features:
-* No databases: the permanent user registry is implemented through the server's UNIX users, along with their ACL permissions. There is a runtime registry, though, to keep track of connected clients.
-* Stateless: no databases means no permanent state which means no inconsistencies and allows things like server-side added files being propagated to clients.
-* No re-invented protocols: SimpleCloud uses well-developed protocols to ensure connection, filesystem watching and syncing.
-* Sync and stream: the user chooses, for each directory, how he wants to access it. SimpleCloud allows both syncing files from a client to a server or direct access to the server's storage.
-* Minimal server dependencies: all of the work is done on the client. The server is only expected to posess a user system and the ability to create a network filesystem connection through either SMB or SSH.
+We aim to create a simple cloud storage solution that doesn't reinvent the wheel. Almost all cloud storage systems run on an operating system with user lists, permissions and filesystems built into it and then add their own users, their own permissions and their own filesystems. This not only makes room for inconsistencies that have to be fixed manually, but it also generates useless overhead that affects performance. SimpleCloud exists to fix this.
+* **Server-side alterations:** unlike almost every other cloud storage, SimpleCloud allows the server itself add and alter files and have those changes propagated. You can have files downloading and transfered to a user folder when they're done, knowing they'll be available on the client.
+* **No databases:** there are no SimpleCloud users, only system users. There are no SimpleCloud directories, only system directories. There are no redundant records.
+* **Stateless:** no databases means no permanent state which means no inconsistencies. Everytime you start SimpleCloud it starts fresh, regardless of what changed since you shut it down.
+* **No new protocols:** SimpleCloud uses the stable, industry leading protocol SSH to ensure security and stability in connections, made by people much smarter and experient at cryptography than us. You can choose what sort of authentication to use, and you can re-use your existing public key.
+* **Sync and stream:** the user chooses, for each directory, how he wants to access it. SimpleCloud allows both syncing files from a client to a server or directly accessing the server's storage from the client.
+* **Minimal server dependencies:** all of the work is done on the client. The server is only expected to posess a user system and the ability to create a network filesystem connection (FUSE) through either SMB or SSH.
 
 ## Python dependencies:
 * Watchdog: Filesystem watcher (http://pythonhosted.org/watchdog/)
