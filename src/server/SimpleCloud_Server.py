@@ -10,7 +10,7 @@ from queue import Queue
 from src.common import ConfigurationParser
 from watchdog.observers import Observer
 from .TaskEmitter import TaskEmitter
-from src.server.ClientRegistrar import ClientRegistrar
+from src.server.Registrar import ClientRegistrar
 from src.server.ClientIndex import ClientIndex
 
 def get_config():

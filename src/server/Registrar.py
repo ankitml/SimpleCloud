@@ -1,13 +1,78 @@
-import subprocess
-import paramiko
 import socket
 import time
 import pickle
 import paramiko
 import threading
 import queue
-import select
 import selectors
+
+from src.server.SSHServer import SSHServer
+from src.server.Client import Client
+from src.common.EventHandler import FileSystemEventHandler
+
+"""
+== Functionality ==
+Index:
+    Dictionary of (path, [keys]) where path is a path to be watched and [keys] is a list of SelectorKey objects
+The Registrar binds a regular TCP socket and awaits connections through a selector. Upon receiving one, a SSH channel
+is negotiated and added to the selector's list of reading. The data property of the selector's key will be initialized
+with a dictionary
+The channel is then supposed to receive a Watch message containing the list of path the client wants to be
+watched. First, we consult the Index dictionary (to be defined where it resides) for each received path, and if it is
+already watched we simply add a new SelectorKey to the list. If not, the Observer is scheduled to watch those
+directories and upon success a new entry is added to the Index in the form of { path:[key] }. Then, the path list will
+be appended to the 'watching' key of the data dictionary of the selector key, indicating that client is watching those
+directories, which will be useful for when they disconnect. A Watching message is sent containing the successfully
+watched paths.
+When a disconnect happens, the 'watching' list from the SelectorKey object is matched to the Index dictionary and the
+SelectorKey is removed from each SelectorKey list. If the list is empty, the watch for that path is unscheduled. The
+SelectorKey's file object gets unscheduled.
+When a Change message arrives, a new entry is inserted into a Changing dictionary (to be defined where it resides),
+in the form of { path:key } where path is the message's path and key is the SelectorKey object, indicating that path
+is being changed by that SelectorKey's client. If an entry for this path OR ANY SUBPATH (ABOVE OR BELOW) exists,
+the request to change is denied (maybe send a message saying so?). Otherwise a CanChange message is sent.
+
+== Message specification ==
+= Client =
+Watch:
+    Request that the server watch a list of paths. Can be used to alter already watched directory lists.
+    {
+        'action' : 'watch'
+        'path' : [list of directories the server should watch]
+    }
+Change:
+    Request to change file or directory
+    {
+        'action' : 'modify'
+        'path' : path
+    }
+Changed:
+    Notification to the server that client has finished modifying remote file
+    {
+        'action' : 'modified'
+        'path' : path
+    }
+= Server =
+Watching:
+    Response to message Watch from the client indicating which of those paths are now watched and which aren't
+    {
+        'action' : 'watching'
+        'watched' : [list of paths watched for this client]
+        'not_watched' : [list of paths that failed to be watched]
+    }
+CanChange:
+    Response to message Change. Notification that the client is allowed to modify file on server
+    {
+        'action' : 'modify_allowed'
+        'path' : path
+    }
+Pull:
+    Notification to client that a certain file was changed and the client should update his version
+    {
+        'action' : 'pull'
+        'path' : path
+    }
+"""
 
 class ParamikoServer(paramiko.ServerInterface):
     def __init__(self, authorized_keys_filename):
@@ -37,7 +102,7 @@ class ParamikoServer(paramiko.ServerInterface):
     def get_allowed_auths(self, username):
         return 'gssapi-keyex,gssapi-with-mic,password,publickey'
 
-class Server(threading.Thread):
+class Registrar(threading.Thread):
     def __init__(self, host, port, incoming, outgoing, server_key, authorized_keys):
         threading.Thread.__init__(self)
         self.server_socket = self.create_socket(host, port)
@@ -51,47 +116,45 @@ class Server(threading.Thread):
     def run(self):
         num_comm = 0
         self.server_socket.listen(10)
-        #nputs = [ self.server_socket ]
-        self.selector.register(self.server_socket, )
+        self.selector.register(self.server_socket, selectors.EVENT_READ)
         self.keep_running.set()
         print("[Server] All set, listening for SSH connections...")
 
         while self.keep_running.is_set():
             events = self.selector.select(timeout=1)
-            (readables, writables, exceptionals) = select.select(inputs, inputs, inputs, 1)
-            #print('Inputs: '+str(inputs)+' | Readables: '+str(readables)+' | Writables: '+str(writables))
+            print('Events: '+str(events))
 
             # Handle incoming registrations, messages and disconnects
-            for readable in readables:
-            #for event in events:
+            for key,event in events:
+                channel = key.fileobj
                 # 1 - New registration
-                if readable is self.server_socket:
+                if channel is self.server_socket:
                     client_socket, address = self.server_socket.accept()
-                    channel = self.negotiate_channel(client_socket)
-                    if not channel:
+                    client_channel = self.negotiate_channel(client_socket)
+                    if not client_channel:
                         continue
                     print("[Server] Now have secure channel with " + str(address))
-                    self.selector.register(channel, selectors.EVENT_READ)
+                    self.selector.register(client_channel, selectors.EVENT_READ, data={})
                 else:
                     try:
 
-                        databin = readable.recv(1024 ^ 2)
+                        databin = channel.recv(1024 ^ 2)
                         # 2 - Client disconnection
                         if not databin:
                             print("[Server] Disconnection")
-                            inputs.remove(readable)
+                            self.selector.unregister(channel)
                         # 3 - Client message
                         else:
                             num_comm += 1
                             data = pickle.loads(databin)
                             self.incoming.put({
-                                'channel': readable,
+                                'channel': channel,
                                 'data': data,
                                 'num' : num_comm
                             })
                             print("Server received: " + str(data))
                     except socket.error:
-                        inputs.remove(readable)
+                        self.selector.unregister(channel)
 
             # Handle outgoing messages
             failed = []
@@ -134,11 +197,16 @@ class Server(threading.Thread):
         server_socket.bind((address, port))
         return server_socket
 
+    def register_directories(self, channel, directories):
+        pass
+
 class Responder(threading.Thread):
     def __init__(self, incoming, outgoing):
         threading.Thread.__init__(self)
         self.incoming = incoming
         self.outgoing = outgoing
+        self.Index = {}
+        self.Watching = {}
         self.keep_running = threading.Event()
 
     def run(self):
@@ -166,7 +234,7 @@ if __name__ == '__main__':
     outgoing = queue.Queue()
     responder = Responder(incoming, outgoing)
     responder.start()
-    server = Server('localhost', 3509, incoming, outgoing, server_key_filename, authorized_keys_filename)
+    server = Registrar('localhost', 3509, incoming, outgoing, server_key_filename, authorized_keys_filename)
     server.run()
     while True:
         try:

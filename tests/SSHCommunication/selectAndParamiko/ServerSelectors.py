@@ -51,47 +51,45 @@ class Server(threading.Thread):
     def run(self):
         num_comm = 0
         self.server_socket.listen(10)
-        #nputs = [ self.server_socket ]
-        self.selector.register(self.server_socket, )
+        self.selector.register(self.server_socket, selectors.EVENT_READ)
         self.keep_running.set()
         print("[Server] All set, listening for SSH connections...")
 
         while self.keep_running.is_set():
             events = self.selector.select(timeout=1)
-            (readables, writables, exceptionals) = select.select(inputs, inputs, inputs, 1)
-            #print('Inputs: '+str(inputs)+' | Readables: '+str(readables)+' | Writables: '+str(writables))
+            print('Events: '+str(events))
 
             # Handle incoming registrations, messages and disconnects
-            for readable in readables:
-            #for event in events:
+            for key,event in events:
+                channel = key.fileobj
                 # 1 - New registration
-                if readable is self.server_socket:
+                if channel is self.server_socket:
                     client_socket, address = self.server_socket.accept()
-                    channel = self.negotiate_channel(client_socket)
-                    if not channel:
+                    client_channel = self.negotiate_channel(client_socket)
+                    if not client_channel:
                         continue
                     print("[Server] Now have secure channel with " + str(address))
-                    self.selector.register(channel, selectors.EVENT_READ)
+                    self.selector.register(client_channel, selectors.EVENT_READ)
                 else:
                     try:
 
-                        databin = readable.recv(1024 ^ 2)
+                        databin = channel.recv(1024 ^ 2)
                         # 2 - Client disconnection
                         if not databin:
                             print("[Server] Disconnection")
-                            inputs.remove(readable)
+                            self.selector.unregister(channel)
                         # 3 - Client message
                         else:
                             num_comm += 1
                             data = pickle.loads(databin)
                             self.incoming.put({
-                                'channel': readable,
+                                'channel': channel,
                                 'data': data,
                                 'num' : num_comm
                             })
                             print("Server received: " + str(data))
                     except socket.error:
-                        inputs.remove(readable)
+                        self.selector.unregister(channel)
 
             # Handle outgoing messages
             failed = []
