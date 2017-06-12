@@ -1,6 +1,10 @@
-import selectors, threading, time, queue, socket
-from src.server.SSHServer import SSHServer
-from tests.SSHCommunication import Client, Server
+import queue
+import selectors
+import threading
+import time
+
+from tests.SSHCommunication import Client
+from tests.SSHCommunication.Paramiko import Server
 
 
 def serverStuff(myQueue):

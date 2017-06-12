@@ -1,5 +1,8 @@
-import asyncio, socket, paramiko
-from tests.SSHCommunication.Server import ParamikoServer
+import asyncio
+import paramiko
+
+from tests.SSHCommunication.Paramiko.Server import ParamikoServer
+
 
 class SSHProtocol(asyncio.BaseProtocol):
     key = paramiko.RSAKey(filename="/home/francisco/.ssh/id_rsa")

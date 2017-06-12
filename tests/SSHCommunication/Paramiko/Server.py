@@ -71,7 +71,7 @@ class Server(threading.Thread):
                     if not channel:
                         break
                     response = pickle.dumps("Acknowledged \"" + data + "\" as message #" + str(num_comm) +" for this session")
-                    channel.send(response)
+                    channel.sendall(response)
                 except (socket.error, EOFError) as err:
                     break
             server.close()

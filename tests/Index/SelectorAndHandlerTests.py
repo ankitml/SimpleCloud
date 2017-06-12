@@ -1,8 +1,10 @@
-import selectors, threading, time, queue, socket
 import asyncio
+import threading
+
 import paramiko
+
 from src.server.SSHServer import SSHServer
-from tests.SSHCommunication import Client, Server
+
 
 # This test will create server-side a thread to handle a server socket for registration
 # and a thread to handle registered client sockets
