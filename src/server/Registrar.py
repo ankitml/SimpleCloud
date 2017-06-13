@@ -9,6 +9,7 @@ import selectors
 from src.server.SSHServer import SSHServer
 from src.server.Client import Client
 from src.common.EventHandler import FileSystemEventHandler
+from src.server.Responder import Responder
 
 """
 == Functionality ==
@@ -121,7 +122,8 @@ class Registrar(threading.Thread):
         self.private_key = paramiko.RSAKey(filename=server_key)
         self.authorized_keys = authorized_keys
         self.selector = selectors.DefaultSelector()
-        self.keep_running = threading.Event()
+        self.stop_event = threading.Event()
+        self.responder = Responder(self.incoming)
 
     def get_incoming(self):
         return self.incoming
@@ -130,10 +132,9 @@ class Registrar(threading.Thread):
         num_comm = 0
         self.server_socket.listen(10)
         self.selector.register(self.server_socket, selectors.EVENT_READ)
-        self.keep_running.set()
         print("[Server] All set, listening for SSH connections...")
 
-        while self.keep_running.is_set():
+        while not self.stop_event.is_set():
             events = self.selector.select(timeout=1)
             print('Events: '+str(events))
 
@@ -186,21 +187,20 @@ class Registrar(threading.Thread):
     def register_directories(self, channel, directories):
         pass
 
+    def stop(self):
+        self.stop_event.set()
+        self.responder.stop()
+
 if __name__ == '__main__':
     from src.server.Responder import Responder
     server_key_filename = "/home/francisco/.ssh/id_rsa"
     authorized_keys_filename = "/home/francisco/.ssh/authorized_keys"
     print('Let\'s start...')
     incoming = queue.Queue()
-    responder = Responder(incoming)
-    responder.start()
-    server = Registrar('localhost', 3509, incoming, server_key_filename, authorized_keys_filename)
-    server.run()
+    server = Registrar('localhost', 3509, server_key_filename, authorized_keys_filename, incoming)
+    server.start()
     while True:
         try:
             time.sleep(10)
         except KeyboardInterrupt:
-            server.keep_running.clear()
-            responder.keep_running.clear()
-            server.join()
-            responder.join()
+            server.stop()

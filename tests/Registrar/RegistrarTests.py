@@ -11,17 +11,13 @@ class RegistrarTests(unittest.TestCase):
         self.host = "localhost"
         self.port = 3509
         self.incoming = queue.Queue()
-        self.responder = Responder(self.incoming)
-        self.responder.start()
         self.server = Registrar(self.host, self.port, key_filename, authorized_keys_filename, self.incoming)
         self.server.start()
         self.client = Client(key_filename)
 
     def tearDown(self):
-        self.server.keep_running.clear()
-        self.responder.keep_running.clear()
+        self.server.stop()
         self.server.join()
-        self.responder.join()
 
     def testWatchMessage(self):
         self.client.connect(self.host, self.port)

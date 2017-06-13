@@ -2,37 +2,19 @@
 import os
 import logging
 import time
-import paramiko
 
 # Multi-threading tools
-from queue import Queue
+import queue
 
 from src.common import ConfigurationParser
 from watchdog.observers import Observer
-from .TaskEmitter import TaskEmitter
-from src.server.Registrar import ClientRegistrar
-from src.server.ClientIndex import ClientIndex
+from src.server.Registrar import Registrar
+from src.server.EventHandler import FileSystemEventHandler
 
 def get_config():
-    global parameters, tasks
     parameters = ConfigurationParser.parse_config()
     print("Parameters: " + str(parameters))
-
-def register_client():
-    global emitters, clients
-    emitters = []
-    registry = ClientIndex
-
-    registrar = ClientRegistrar(
-        parameters["host"], parameters["port"], clients,
-        parameters["private_key_file"], parameters["authorized_keys_file"])
-
-    emitter = TaskEmitter(client_connection, tasks)
-    emitter.start()
-    emitters.append(emitter)
-    emitter.watch_queue.set()
-
-    watch_queues(sync_dirs)
+    return parameters
 
 def connect():
     global emitter, tasks
@@ -59,12 +41,23 @@ def watch(sync_dirs):
     print("Here")
 
 global parameters, observer, emitters, tasks, clients
-tasks = Queue()
-clients = Queue()
+messages = queue.Queue()
 
-get_config()
-register_client()
-#connect()
-#watch()
-
-exit()
+if __name__ == "__main__":
+    parameters = get_config()
+    observer = Observer()
+    handler = FileSystemEventHandler(messages)
+    registrar = Registrar(parameters["host"],
+                          parameters["port"],
+                          parameters["private_key_file"],
+                          parameters["authorized_keys_file"],
+                          incoming=messages)
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("Stopping observer")
+    registrar.stop()
+    observer.stop()
+    #connect()
+    #watch()

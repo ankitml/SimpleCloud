@@ -9,11 +9,10 @@ class Responder(threading.Thread):
         self.incoming = (incoming if incoming else queue.Queue())
         self.Index = {}
         self.Watching = {}
-        self.keep_running = threading.Event()
+        self.stop_event = threading.Event()
 
     def run(self):
-        self.keep_running.set()
-        while self.keep_running.is_set():
+        while not self.stop_event.is_set():
             try:
                 message = self.incoming.get(block=True, timeout=1)
                 channel = message['channel']
@@ -49,3 +48,7 @@ class Responder(threading.Thread):
                 # print('Channel could be used')
         else:
             print('Channel is not writable')
+
+    def stop(self):
+        self.stop_event.set()
+        #self.join()
