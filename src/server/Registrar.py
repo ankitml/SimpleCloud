@@ -14,6 +14,17 @@ from src.common.EventHandler import FileSystemEventHandler
 == Functionality ==
 Index:
     Dictionary of (path, [keys]) where path is a path to be watched and [keys] is a list of SelectorKey objects
+    Property of the Responder
+Watching:
+    Dictionary of (path, key) where path is a path being watched by a key's client
+    Property of the Responder
+Registrar:
+    Thread responsible for receiving new client connections, listening to their channels for news messages (which
+    are inserted into the incoming queue) and noticing disconnects
+Responder:
+    Thread responsible for receiving messages from the incoming queue and generating an appropriate response which is
+    sent into the channel attached to that message, if possible
+
 The Registrar binds a regular TCP socket and awaits connections through a selector. Upon receiving one, a SSH channel
 is negotiated and added to the selector's list of reading. The data property of the selector's key will be initialized
 with a dictionary
@@ -103,15 +114,17 @@ class ParamikoServer(paramiko.ServerInterface):
         return 'gssapi-keyex,gssapi-with-mic,password,publickey'
 
 class Registrar(threading.Thread):
-    def __init__(self, host, port, incoming, outgoing, server_key, authorized_keys):
+    def __init__(self, host, port, server_key, authorized_keys, incoming=None):
         threading.Thread.__init__(self)
         self.server_socket = self.create_socket(host, port)
-        self.incoming = incoming
-        self.outgoing = outgoing
+        self.incoming = (incoming if incoming else queue.Queue())
         self.private_key = paramiko.RSAKey(filename=server_key)
         self.authorized_keys = authorized_keys
         self.selector = selectors.DefaultSelector()
         self.keep_running = threading.Event()
+
+    def get_incoming(self):
+        return self.incoming
 
     def run(self):
         num_comm = 0
@@ -156,33 +169,6 @@ class Registrar(threading.Thread):
                     except socket.error:
                         self.selector.unregister(channel)
 
-            # Handle outgoing messages
-            failed = []
-            while True:
-                try:
-                    message = self.outgoing.get(block=False)
-                    self.outgoing.task_done()
-                    channel = message['channel']
-                    data = message['data']
-                    databin = pickle.dumps(data)
-                    # For some reason, select.select() return writables as an empty list always
-                    # So we have to rely on the channel's own check
-                    # if channel in writables:
-                    if channel.send_ready():
-                        try:
-                            channel.sendall(databin)
-                        except(socket.timeout, socket.error):
-                            print('Channel error')
-                            failed.append(message)
-                        print('Channel could be used')
-                    #else:
-                    #    print('Channel is not writable')
-                    #    failed.append(message)
-                except queue.Empty:
-                    break
-            for message in failed:
-                outgoing.put(message)
-
     def negotiate_channel(self, client_socket):
         handler = paramiko.Transport(client_socket)
         handler.add_server_key(self.private_key)
@@ -200,41 +186,15 @@ class Registrar(threading.Thread):
     def register_directories(self, channel, directories):
         pass
 
-class Responder(threading.Thread):
-    def __init__(self, incoming, outgoing):
-        threading.Thread.__init__(self)
-        self.incoming = incoming
-        self.outgoing = outgoing
-        self.Index = {}
-        self.Watching = {}
-        self.keep_running = threading.Event()
-
-    def run(self):
-        self.keep_running.set()
-        while self.keep_running.is_set():
-            try:
-                message = self.incoming.get(block=True, timeout=1)
-                channel = message['channel']
-                data = message['data']
-                num = message['num']
-                response = "Acknowledged \"" + data + "\" as message #" + str(num) + " for this session"
-                self.outgoing.put({
-                    'channel' : channel,
-                    'data' : response
-                }, block=True)
-                print('[Responder] Got: '+data+'   Replied: '+response)
-            except queue.Empty:
-                continue
-
 if __name__ == '__main__':
+    from src.server.Responder import Responder
     server_key_filename = "/home/francisco/.ssh/id_rsa"
     authorized_keys_filename = "/home/francisco/.ssh/authorized_keys"
     print('Let\'s start...')
     incoming = queue.Queue()
-    outgoing = queue.Queue()
-    responder = Responder(incoming, outgoing)
+    responder = Responder(incoming)
     responder.start()
-    server = Registrar('localhost', 3509, incoming, outgoing, server_key_filename, authorized_keys_filename)
+    server = Registrar('localhost', 3509, incoming, server_key_filename, authorized_keys_filename)
     server.run()
     while True:
         try:

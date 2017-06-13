@@ -42,7 +42,7 @@ class Server(threading.Thread):
         threading.Thread.__init__(self)
         self.server_socket = self.create_socket(host, port)
         self.incoming = incoming
-        self.outgoing = outgoing
+        #self.outgoing = outgoing
         self.private_key = paramiko.RSAKey(filename=server_key)
         self.authorized_keys = authorized_keys
         self.selector = selectors.DefaultSelector()
@@ -91,33 +91,6 @@ class Server(threading.Thread):
                     except socket.error:
                         self.selector.unregister(channel)
 
-            # Handle outgoing messages
-            failed = []
-            while True:
-                try:
-                    message = self.outgoing.get(block=False)
-                    self.outgoing.task_done()
-                    channel = message['channel']
-                    data = message['data']
-                    databin = pickle.dumps(data)
-                    # For some reason, select.select() return writables as an empty list always
-                    # So we have to rely on the channel's own check
-                    # if channel in writables:
-                    if channel.send_ready():
-                        try:
-                            channel.sendall(databin)
-                        except(socket.timeout, socket.error):
-                            print('Channel error')
-                            failed.append(message)
-                        print('Channel could be used')
-                    #else:
-                    #    print('Channel is not writable')
-                    #    failed.append(message)
-                except queue.Empty:
-                    break
-            for message in failed:
-                outgoing.put(message)
-
     def negotiate_channel(self, client_socket):
         handler = paramiko.Transport(client_socket)
         handler.add_server_key(self.private_key)
@@ -136,7 +109,7 @@ class Responder(threading.Thread):
     def __init__(self, incoming, outgoing):
         threading.Thread.__init__(self)
         self.incoming = incoming
-        self.outgoing = outgoing
+        #self.outgoing = outgoing
         self.keep_running = threading.Event()
 
     def run(self):
@@ -144,17 +117,36 @@ class Responder(threading.Thread):
         while self.keep_running.is_set():
             try:
                 message = self.incoming.get(block=True, timeout=1)
+                self.incoming.task_done()
                 channel = message['channel']
                 data = message['data']
                 num = message['num']
                 response = "Acknowledged \"" + data + "\" as message #" + str(num) + " for this session"
-                self.outgoing.put({
-                    'channel' : channel,
-                    'data' : response
-                }, block=True)
-                print('[Responder] Got: '+data+'   Replied: '+response)
+                responsebin = pickle.dumps(response)
+                # For some reason, select.select() return writables as an empty list always
+                # So we have to rely on the channel's own check
+                # if channel in writables:
+                if channel.send_ready():
+                    print('[Responder] Sleeping, close channel now')
+                    time.sleep(5)
+                    print('[Responder] Attempting to write to channel')
+                    try:
+                        channel.sendall(responsebin)
+                        print('[Responder] Got: ' + data + '   Replied: ' + response)
+                    except(socket.timeout, socket.error):
+                        print('Channel error')
+                        #failed.append(message)
+                # else:
+                #    print('Channel is not writable')
+                #    failed.append(message)
             except queue.Empty:
-                continue
+                pass
+            #for message in failed:
+            #    outgoing.put(message)
+                # self.outgoing.put({
+                #     'channel' : channel,
+                #     'data' : response
+                # }, block=True)
 
 if __name__ == '__main__':
     server_key_filename = "/home/francisco/.ssh/id_rsa"
