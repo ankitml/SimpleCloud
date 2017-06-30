@@ -43,47 +43,6 @@ When a Change message arrives, a new entry is inserted into a Changing dictionar
 in the form of { path:key } where path is the message's path and key is the SelectorKey object, indicating that path
 is being changed by that SelectorKey's client. If an entry for this path OR ANY SUBPATH (ABOVE OR BELOW) exists,
 the request to change is denied (maybe send a message saying so?). Otherwise a CanChange message is sent.
-
-== Message specification ==
-= Client =
-Watch:
-    Request that the server watch a list of paths. Can be used to alter already watched directory lists.
-    {
-        'action' : 'watch'
-        'path' : [list of directories the server should watch]
-    }
-Change:
-    Request to change file or directory
-    {
-        'action' : 'modify'
-        'path' : path
-    }
-Changed:
-    Notification to the server that client has finished modifying remote file
-    {
-        'action' : 'modified'
-        'path' : path
-    }
-= Server =
-Watching:
-    Response to message Watch from the client indicating which of those paths are now watched and which aren't
-    {
-        'action' : 'watching'
-        'watched' : [list of paths watched for this client]
-        'not_watched' : [list of paths that failed to be watched]
-    }
-CanChange:
-    Response to message Change. Notification that the client is allowed to modify file on server
-    {
-        'action' : 'modify_allowed'
-        'path' : path
-    }
-Pull:
-    Notification to client that a certain file was changed and the client should update his version
-    {
-        'action' : 'pull'
-        'path' : path
-    }
 """
 
 class ParamikoServer(paramiko.ServerInterface):
@@ -124,12 +83,12 @@ class Registrar(threading.Thread):
         self.selector = selectors.DefaultSelector()
         self.stop_event = threading.Event()
         self.responder = Responder(self.incoming)
+        self.paramiko_server = ParamikoServer(self.authorized_keys)
 
     def get_incoming(self):
         return self.incoming
 
     def run(self):
-        num_comm = 0
         self.server_socket.listen(10)
         self.selector.register(self.server_socket, selectors.EVENT_READ)
         print("[Server] All set, listening for SSH connections...")
@@ -151,7 +110,6 @@ class Registrar(threading.Thread):
                     self.selector.register(client_channel, selectors.EVENT_READ, data={})
                 else:
                     try:
-
                         databin = channel.recv(1024 ^ 2)
                         # 2 - Client disconnection
                         if not databin:
@@ -159,12 +117,10 @@ class Registrar(threading.Thread):
                             self.selector.unregister(channel)
                         # 3 - Client message
                         else:
-                            num_comm += 1
                             data = pickle.loads(databin)
                             self.incoming.put({
                                 'channel': channel,
                                 'data': data,
-                                'num' : num_comm
                             })
                             print("Server received: " + str(data))
                     except socket.error:
@@ -173,8 +129,7 @@ class Registrar(threading.Thread):
     def negotiate_channel(self, client_socket):
         handler = paramiko.Transport(client_socket)
         handler.add_server_key(self.private_key)
-        paramiko_server = ParamikoServer(self.authorized_keys)
-        handler.start_server(server=paramiko_server)
+        handler.start_server(server=self.paramiko_server)
         return handler.accept(20)
 
     def create_socket(self, address, port):
@@ -183,9 +138,6 @@ class Registrar(threading.Thread):
         #server_socket.listen(100)
         server_socket.bind((address, port))
         return server_socket
-
-    def register_directories(self, channel, directories):
-        pass
 
     def stop(self):
         self.stop_event.set()

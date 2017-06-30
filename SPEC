@@ -1,0 +1,41 @@
+== Message specification ==
+
+= Common =
+Change:
+    Request to change file or directory according to the hashes sent
+    Transaction ID should be unique to the sender
+    {
+        'action' : 'modify'
+        'id' : transaction ID
+        'path' : path
+        'hashes' : hashes
+    }
+Changed:
+    Notification for the recipient that sender has finished modifying his local file as requested
+    Transaction ID should be the same as the request
+    {
+        'action' : 'modified'
+        'id' : transaction ID
+        'path' : path
+    }
+
+= Client =
+Watch:
+    Request that the server watch a list of paths. Can be used to alter already watched directory lists.
+    Transaction ID should be unique to the sender
+    {
+        "id" : transaction ID
+        'action' : 'watch'
+        'path' : [list of directories the server should watch]
+    }
+
+= Server =
+Watching:
+    Response to message Watch from the client indicating which of those paths are now watched and which aren't
+    Transaction ID should be the same as the request
+    {
+        "id" : transaction ID
+        'action' : 'watching'
+        'watched' : [list of paths watched for this client]
+        'not_watched' : [list of paths that failed to be watched]
+    }

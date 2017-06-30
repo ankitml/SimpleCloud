@@ -3,15 +3,13 @@ import os
 import time
 
 class FileSystemEventHandler(FileSystemEventHandler_super):
-	def __init__(self, client):
+	def __init__(self, queue):
 		super(FileSystemEventHandler, self).__init__()
-		#self.index = index
-		self.client = client
-		#self.localRoot = os.path.abspath(localRoot)
-		#self.remoteRoot = os.path.abspath(remoteRoot)
-		#self.tasks = tasks
-		#print("[Handler] My root is " + self.localRoot + " and I send to " + remoteRoot)
+		self.queue = queue
 
+	def on_any_event(self, event):
+		self.queue.put(event)
+"""
 	def on_moved(self, event):
 		#source = self.localPathToRemote(event.src_path) + ("/" if event.is_directory else "")
 		#destination = self.localPathToRemote(event.dest_path) + ("/" if event.is_directory else "")
@@ -47,4 +45,4 @@ class FileSystemEventHandler(FileSystemEventHandler_super):
 	#def localPathToRemote(self, localPath):
 	#	relative_path = os.path.relpath(localPath, self.localRoot)
 	#	return os.path.join(self.remoteRoot, relative_path)
-
+"""
