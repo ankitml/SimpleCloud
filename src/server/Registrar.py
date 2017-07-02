@@ -45,45 +45,35 @@ is being changed by that SelectorKey's client. If an entry for this path OR ANY 
 the request to change is denied (maybe send a message saying so?). Otherwise a CanChange message is sent.
 """
 
-class ParamikoServer(paramiko.ServerInterface):
-    def __init__(self, authorized_keys_filename):
-        self.authorized_keys_filename = authorized_keys_filename
-        self.event = threading.Event()
-
-    def check_channel_request(self, kind, chanid):
-        if kind == 'session':
-            return paramiko.OPEN_SUCCEEDED
-        return paramiko.OPEN_FAILED_ADMINISTRATIVELY_PROHIBITED
-
-    def check_auth_publickey(self, username, key):
-        print('[Server] Auth attempt with key: ' + str(key.get_base64()))
-
-        authorized_keys = open(self.authorized_keys_filename, "r")
-        lines = authorized_keys.readlines()
-        authorized_keys.close()
-
-        for line in lines:
-            print("[Server] Comparing "+line+" to "+key.get_base64())
-            if key.get_base64() in line and username in line:
-                print("[Server] Valid key")
-                return paramiko.AUTH_SUCCESSFUL
-        print("[Server] Invalid key")
-        return paramiko.AUTH_FAILED
-
-    def get_allowed_auths(self, username):
-        return 'gssapi-keyex,gssapi-with-mic,password,publickey'
-
 class Registrar(threading.Thread):
-    def __init__(self, host, port, server_key, authorized_keys, incoming=None):
+    def __init__(self, host, port, server_key, authorized_keys, host_keys=None, incoming=None):
         threading.Thread.__init__(self)
         self.server_socket = self.create_socket(host, port)
         self.incoming = (incoming if incoming else queue.Queue())
         self.private_key = paramiko.RSAKey(filename=server_key)
         self.authorized_keys = authorized_keys
+        self.host_keys = host_keys
         self.selector = selectors.DefaultSelector()
         self.stop_event = threading.Event()
         self.responder = Responder(self.incoming)
-        self.paramiko_server = ParamikoServer(self.authorized_keys)
+        self.paramiko_server = SSHServer(self.authorized_keys)
+        # Client functionality
+        self.clients = []
+        self.to_watch = queue.Queue()
+
+    def connect(self, host, port):
+        client = paramiko.SSHClient()
+        client.load_system_host_keys(self.host_keys)
+        client.set_missing_host_key_policy(paramiko.WarningPolicy())
+        client.connect(host, port=port, pkey=self.private_key)
+        # input, output, err = client.exec_command("ls -la")
+        # for line in output.readlines():
+        #     print(line)
+        transport = client.get_transport()
+        channel = transport.open_channel(kind="session")
+        self.clients.append(client)
+        self.to_watch.put(channel)
+        return channel
 
     def get_incoming(self):
         return self.incoming
@@ -91,16 +81,16 @@ class Registrar(threading.Thread):
     def run(self):
         self.server_socket.listen(10)
         self.selector.register(self.server_socket, selectors.EVENT_READ)
-        print("[Server] All set, listening for SSH connections...")
+        print("[Server] All set, listening for SSH connections.")
 
         while not self.stop_event.is_set():
             events = self.selector.select(timeout=1)
-            print('Events: '+str(events))
+            #print('Events: '+str(events))
 
-            # Handle incoming registrations, messages and disconnects
+            # 1 - Handle incoming client registrations, messages and disconnects
             for key,event in events:
                 channel = key.fileobj
-                # 1 - New registration
+                # 1.1 - New registration
                 if channel is self.server_socket:
                     client_socket, address = self.server_socket.accept()
                     client_channel = self.negotiate_channel(client_socket)
@@ -111,11 +101,11 @@ class Registrar(threading.Thread):
                 else:
                     try:
                         databin = channel.recv(1024 ^ 2)
-                        # 2 - Client disconnection
+                        # 1.2 - Client disconnection
                         if not databin:
                             print("[Server] Disconnection")
                             self.selector.unregister(channel)
-                        # 3 - Client message
+                        # 1.3 - Client message
                         else:
                             data = pickle.loads(databin)
                             self.incoming.put({
@@ -125,6 +115,15 @@ class Registrar(threading.Thread):
                             print("Server received: " + str(data))
                     except socket.error:
                         self.selector.unregister(channel)
+
+            # 2 - Register connected server channels for observation
+            while True:
+                try:
+                    channel = self.to_watch.get(block=False)
+                    self.selector.register(channel, selectors.EVENT_READ, data={})
+                except queue.Empty:
+                    break
+        print("[Registrar] Stopping")
 
     def negotiate_channel(self, client_socket):
         handler = paramiko.Transport(client_socket)
@@ -144,15 +143,36 @@ class Registrar(threading.Thread):
         self.responder.stop()
 
 if __name__ == '__main__':
-    from src.server.Responder import Responder
     server_key_filename = "/home/francisco/.ssh/id_rsa"
     authorized_keys_filename = "/home/francisco/.ssh/authorized_keys"
     print('Let\'s start...')
-    incoming = queue.Queue()
-    server = Registrar('localhost', 3509, server_key_filename, authorized_keys_filename, incoming)
-    server.start()
+    #server = Registrar('localhost', 3509, server_key_filename, authorized_keys_filename)
+    #server.start()
     while True:
+        port_str = input("What is my port?\n> ")
         try:
+            port = int(port_str)
+            if port not in range(1024, 65535):
+                raise ValueError
+            break
+        except ValueError:
+            print("Invalid port number")
+    registrar = Registrar('localhost', port, server_key_filename, authorized_keys_filename)
+    registrar.start()
+    try:
+        mode = input("Am I a server or a client? (S\\C)\n> ")
+        # Server
+        # pass
+        # Client
+        if mode in ["C", "c"]:
+            remote = input("What local port should I connect to? \n> ")
+            #split = remote.split(":")
+            #host = split[0]
+            #port = int(split[1])
+            host = "localhost"
+            port = int(remote)
+            registrar.connect(host, port)
+        while True:
             time.sleep(10)
-        except KeyboardInterrupt:
-            server.stop()
+    except KeyboardInterrupt:
+        registrar.stop()

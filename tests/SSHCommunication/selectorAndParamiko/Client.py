@@ -1,5 +1,4 @@
 import pickle
-
 import paramiko
 
 
@@ -16,7 +15,7 @@ def getChannel():
     #     print(line)
 
     transport = client.get_transport()
-    channel = transport.open_channel(kind="session")
+    channel = transport.open_channl(kind="session")
     return channel
 
 if __name__ == "__main__":

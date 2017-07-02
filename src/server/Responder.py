@@ -36,6 +36,7 @@ class Responder(threading.Thread):
                     self.send(response, channel)
             except queue.Empty:
                 continue
+        print("[Responder] Stopping")
 
     def handle_message(self, message):
         action = message["action"]
@@ -109,4 +110,3 @@ class Responder(threading.Thread):
     def stop(self):
         self.stop_event.set()
         self.observer.stop()
-        self.handler.stop()

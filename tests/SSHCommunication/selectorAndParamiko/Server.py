@@ -42,7 +42,7 @@ class Server(threading.Thread):
         threading.Thread.__init__(self)
         self.server_socket = self.create_socket(host, port)
         self.incoming = incoming
-        self.outgoing = outgoing
+        #self.outgoing = outgoing
         self.private_key = paramiko.RSAKey(filename=server_key)
         self.authorized_keys = authorized_keys
         self.selector = selectors.DefaultSelector()
@@ -51,74 +51,45 @@ class Server(threading.Thread):
     def run(self):
         num_comm = 0
         self.server_socket.listen(10)
-        #nputs = [ self.server_socket ]
-        self.selector.register(self.server_socket, )
+        self.selector.register(self.server_socket, selectors.EVENT_READ)
         self.keep_running.set()
         print("[Server] All set, listening for SSH connections...")
 
         while self.keep_running.is_set():
             events = self.selector.select(timeout=1)
-            (readables, writables, exceptionals) = select.select(inputs, inputs, inputs, 1)
-            #print('Inputs: '+str(inputs)+' | Readables: '+str(readables)+' | Writables: '+str(writables))
+            print('Events: '+str(events))
 
             # Handle incoming registrations, messages and disconnects
-            for readable in readables:
-            #for event in events:
+            for key,event in events:
+                channel = key.fileobj
                 # 1 - New registration
-                if readable is self.server_socket:
+                if channel is self.server_socket:
                     client_socket, address = self.server_socket.accept()
-                    channel = self.negotiate_channel(client_socket)
-                    if not channel:
+                    client_channel = self.negotiate_channel(client_socket)
+                    if not client_channel:
                         continue
                     print("[Server] Now have secure channel with " + str(address))
-                    self.selector.register(channel, selectors.EVENT_READ)
+                    self.selector.register(client_channel, selectors.EVENT_READ)
                 else:
                     try:
 
-                        databin = readable.recv(1024 ^ 2)
+                        databin = channel.recv(1024 ^ 2)
                         # 2 - Client disconnection
                         if not databin:
                             print("[Server] Disconnection")
-                            inputs.remove(readable)
+                            self.selector.unregister(channel)
                         # 3 - Client message
                         else:
                             num_comm += 1
                             data = pickle.loads(databin)
                             self.incoming.put({
-                                'channel': readable,
+                                'channel': channel,
                                 'data': data,
                                 'num' : num_comm
                             })
                             print("Server received: " + str(data))
                     except socket.error:
-                        inputs.remove(readable)
-
-            # Handle outgoing messages
-            failed = []
-            while True:
-                try:
-                    message = self.outgoing.get(block=False)
-                    self.outgoing.task_done()
-                    channel = message['channel']
-                    data = message['data']
-                    databin = pickle.dumps(data)
-                    # For some reason, select.select() return writables as an empty list always
-                    # So we have to rely on the channel's own check
-                    # if channel in writables:
-                    if channel.send_ready():
-                        try:
-                            channel.sendall(databin)
-                        except(socket.timeout, socket.error):
-                            print('Channel error')
-                            failed.append(message)
-                        print('Channel could be used')
-                    #else:
-                    #    print('Channel is not writable')
-                    #    failed.append(message)
-                except queue.Empty:
-                    break
-            for message in failed:
-                outgoing.put(message)
+                        self.selector.unregister(channel)
 
     def negotiate_channel(self, client_socket):
         handler = paramiko.Transport(client_socket)
@@ -138,7 +109,7 @@ class Responder(threading.Thread):
     def __init__(self, incoming, outgoing):
         threading.Thread.__init__(self)
         self.incoming = incoming
-        self.outgoing = outgoing
+        #self.outgoing = outgoing
         self.keep_running = threading.Event()
 
     def run(self):
@@ -146,17 +117,36 @@ class Responder(threading.Thread):
         while self.keep_running.is_set():
             try:
                 message = self.incoming.get(block=True, timeout=1)
+                self.incoming.task_done()
                 channel = message['channel']
                 data = message['data']
                 num = message['num']
                 response = "Acknowledged \"" + data + "\" as message #" + str(num) + " for this session"
-                self.outgoing.put({
-                    'channel' : channel,
-                    'data' : response
-                }, block=True)
-                print('[Responder] Got: '+data+'   Replied: '+response)
+                responsebin = pickle.dumps(response)
+                # For some reason, select.select() return writables as an empty list always
+                # So we have to rely on the channel's own check
+                # if channel in writables:
+                if channel.send_ready():
+                    print('[Responder] Sleeping, close channel now')
+                    time.sleep(5)
+                    print('[Responder] Attempting to write to channel')
+                    try:
+                        channel.sendall(responsebin)
+                        print('[Responder] Got: ' + data + '   Replied: ' + response)
+                    except(socket.timeout, socket.error):
+                        print('Channel error')
+                        #failed.append(message)
+                # else:
+                #    print('Channel is not writable')
+                #    failed.append(message)
             except queue.Empty:
-                continue
+                pass
+            #for message in failed:
+            #    outgoing.put(message)
+                # self.outgoing.put({
+                #     'channel' : channel,
+                #     'data' : response
+                # }, block=True)
 
 if __name__ == '__main__':
     server_key_filename = "/home/francisco/.ssh/id_rsa"
@@ -167,7 +157,7 @@ if __name__ == '__main__':
     responder = Responder(incoming, outgoing)
     responder.start()
     server = Server('localhost', 3509, incoming, outgoing, server_key_filename, authorized_keys_filename)
-    server.run()
+    server.start()
     while True:
         try:
             time.sleep(10)

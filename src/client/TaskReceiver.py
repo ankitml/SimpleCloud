@@ -71,6 +71,6 @@ def test():
 	
 	receiver = TaskReceiver(host, port, Queue())
 	print("Created receiver")
-	receiver.run()
+	receiver.start()
 
 #test()
