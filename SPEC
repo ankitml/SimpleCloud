@@ -25,8 +25,8 @@ Watch:
     Transaction ID should be unique to the sender
     {
         "id" : transaction ID
-        'action' : 'watch'
-        'path' : [list of directories the server should watch]
+        "action" : "watch"
+        "path" : [list of directories the server should watch]
     }
 
 = Server =
@@ -36,6 +36,6 @@ Watching:
     {
         "id" : transaction ID
         'action' : 'watching'
-        'watched' : [list of paths watched for this client]
-        'not_watched' : [list of paths that failed to be watched]
+        'successful' : [list of paths watched for this client]
+        'failed' : [list of paths that failed to be watched]
     }

@@ -8,6 +8,7 @@ class FileSystemEventHandler(FileSystemEventHandler_super):
 		self.queue = queue
 
 	def on_any_event(self, event):
+		print("[Handler] Received event "+str(event.event_type)+" on "+str(event.src_path))
 		self.queue.put(event)
 """
 	def on_moved(self, event):

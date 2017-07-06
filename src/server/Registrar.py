@@ -14,7 +14,7 @@ from src.server.Responder import Responder
 """
 == Functionality ==
 Index:
-    Dictionary of (path, [keys]) where path is a path to be watched and [keys] is a list of SelectorKey objects
+    Dictionary of (path, [channels]) where path is a path to be watched and [keys] is a list of Paramiko Channel objects
     Property of the Responder
 Watching:
     Dictionary of (path, key) where path is a path being watched by a key's client
@@ -55,7 +55,7 @@ class Registrar(threading.Thread):
         self.host_keys = host_keys
         self.selector = selectors.DefaultSelector()
         self.stop_event = threading.Event()
-        self.responder = Responder(self.incoming)
+        self.responder = Responder(incoming=self.incoming)
         self.paramiko_server = SSHServer(self.authorized_keys)
         # Client functionality
         self.clients = []
@@ -81,6 +81,7 @@ class Registrar(threading.Thread):
     def run(self):
         self.server_socket.listen(10)
         self.selector.register(self.server_socket, selectors.EVENT_READ)
+        self.responder.start()
         print("[Server] All set, listening for SSH connections.")
 
         while not self.stop_event.is_set():
@@ -109,10 +110,10 @@ class Registrar(threading.Thread):
                         else:
                             data = pickle.loads(databin)
                             self.incoming.put({
-                                'channel': channel,
-                                'data': data,
+                                "channel": channel,
+                                "message": data,
                             })
-                            print("Server received: " + str(data))
+                            print("[Server] Received: " + str(data))
                     except socket.error:
                         self.selector.unregister(channel)
 
@@ -137,6 +138,9 @@ class Registrar(threading.Thread):
         #server_socket.listen(100)
         server_socket.bind((address, port))
         return server_socket
+
+    def send(self, message, channel):
+        self.responder.send(message, channel)
 
     def stop(self):
         self.stop_event.set()
@@ -171,7 +175,14 @@ if __name__ == '__main__':
             #port = int(split[1])
             host = "localhost"
             port = int(remote)
-            registrar.connect(host, port)
+            channel = registrar.connect(host, port)
+            message_watch = {
+                "action" : "watch",
+                "id" : 1,
+                "path" : ["/home/francisco/.temp/dir_server"]
+            }
+            registrar.send(message_watch, channel)
+
         while True:
             time.sleep(10)
     except KeyboardInterrupt:
