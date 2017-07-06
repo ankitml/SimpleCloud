@@ -139,8 +139,8 @@ class Registrar(threading.Thread):
         server_socket.bind((address, port))
         return server_socket
 
-    def send(self, message, channel):
-        self.responder.send(message, channel)
+    def request_watch(self, paths, channel):
+        self.responder.request_watch(paths, channel)
 
     def stop(self):
         self.stop_event.set()
@@ -176,12 +176,7 @@ if __name__ == '__main__':
             host = "localhost"
             port = int(remote)
             channel = registrar.connect(host, port)
-            message_watch = {
-                "action" : "watch",
-                "id" : 1,
-                "path" : ["/home/francisco/.temp/dir_server"]
-            }
-            registrar.send(message_watch, channel)
+            registrar.request_watch([("/home/francisco/.temp/dir_client", "/home/francisco/.temp/dir_server/")], channel)
 
         while True:
             time.sleep(10)

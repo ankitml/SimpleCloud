@@ -3,17 +3,19 @@ import pickle
 import threading
 import queue
 import zlib
+import itertools
+import os
 import pyrsync2 as rsync
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEvent
 from src.common.EventHandler import FileSystemEventHandler
+from src.server.Index import Index
 
 class Responder(threading.Thread):
     def __init__(self, incoming=None):
         threading.Thread.__init__(self)
         self.incoming = (incoming if incoming else queue.Queue())
-        self.Index = {}
-        self.Watching = {}
+        self.index = Index()
         self.stop_event = threading.Event()
         self.observer = Observer()
         self.handler = FileSystemEventHandler(self.incoming)
@@ -45,7 +47,10 @@ class Responder(threading.Thread):
     def handle_message(self, message, channel):
         action = message["action"]
         id = message["id"]
-        response = "Invalid message ("+action+")"
+        response = {
+            "action" : "Invalid message ("+action+")",
+            "id": id
+        }
         # Case 2.1 - Client wants to watch a directory
         if action == "watch":
             paths = message["path"]
@@ -59,9 +64,9 @@ class Responder(threading.Thread):
         # Case 2.2 - Client wants server to modify its own file
         elif action == "modify":
             path = message["path"]
-            compressed_hashes = message["hashes"]
-            hashes = zlib.decompressobj(compressed_hashes)
-            result = Responder.modify(path, hashes) #No response implemented
+            hashes = message["hashes"]
+            #hashes = zlib.decompressobj(compressed_hashes)
+            self.modify(path, hashes) #No response implemented
             response = {
                 "action" : "modified",
                 "id" : id,
@@ -71,6 +76,13 @@ class Responder(threading.Thread):
             successful = message["successful"]
             print("[Responder] Server is now watching "+str(successful))
             return
+        elif action == "modified":
+            path = message["path"]
+            print("[Responder] Remote done modifying correspondent to "+str(path))
+            return
+        elif action == "invalid":
+            print("[Responder] Message "+str(id)+" was invalid")
+            return
         return response
 
     def watch(self, paths, channel):
@@ -79,26 +91,38 @@ class Responder(threading.Thread):
         for path in paths:
             watch = self.observer.schedule(self.handler, path)
             succeeded.append(path)
-            if "path" in self.Index:
-                self.Index["path"].append(channel)
-            else:
-                self.Index["path"] = [channel]
+            self.index.add(channel, paths)
         return (succeeded,failed)
 
+    def request_watch(self, paths, channel):
+        remotes = []
+        for local,remote in paths:
+            remotes.append(remote)
+        request = {
+            "action": "watch",
+            "id": 1,
+            "path": remotes
+        }
+        self.send(request, channel)
+        for local,remote in paths:
+            self.index.add_paths(local, remote, channel)
+
     def notify_all(self, path, id):
+        channels = self.index.get_watchers(path)
+        print(str(channels))
         with open(path, "rb") as file:
             for hash in rsync.blockchecksums(file):
-                print(hash)
+                #print(hash)
                 #compressed_hash = zlib.compressobj(hash)
-                response = {
+                message = {
                   "id": id,
-                  "action": "change",
+                  "action": "modify",
                   "path": path,
-                  "hashes": hash
+                  "hashes": [hash]
                 }
-                channels = self.Index[path]
+                #print(str(channels))
                 for channel in channels:
-                    self.send(response, channel)
+                    self.send(message, channel)
                 #hashes = rsync.blockchecksums(file)
         #compressed_hashes = zlib.compressobj(hashes)
         #response = {
@@ -111,11 +135,32 @@ class Responder(threading.Thread):
         #for channel in channels:
         #    self.send(response, channel)
 
+    def modify(self, path, hashes):
+        local_path = self.index.get_local(path)
+        try:
+            local_file = open(local_path, "r+b")
+        except FileNotFoundError:
+            local_file = open(local_path, "w+b")
+        delta = rsync.rsyncdelta(local_file, hashes)
+        rsync.patchstream(local_file, local_file, delta)
+        local_file.close()
+        # delta = Responder.peek(delta)
+        # if delta:
+        #     print("[Responder] Delta is not null, modifying")
+        # else:
+        #     print("[Responder] Delta is null, files are equal")
+
     @staticmethod
-    def modify(path, hashes):
-        with open(path, "r+") as local_file:
-            delta = rsync.rsyncdelta(local_file, hashes)
-            rsync.patchstream(local_file, local_file, delta)
+    def peek(delta):
+        try:
+            first = next(delta)
+            print("[Responder] First element is "+str(first))
+            if first == 0:
+                return None
+        except StopIteration:
+            print("[Responder] Delta is null")
+            return None
+        return itertools.chain([first], delta)
 
     @staticmethod
     def send(message, channel):
