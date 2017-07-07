@@ -8,8 +8,10 @@ import os
 import pyrsync2 as rsync
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEvent
-from src.common.EventHandler import FileSystemEventHandler
+from src.common.EventHandler import IndependentEventHandler, RequestedEventHandler
 from src.server.Index import Index
+
+DEFAULT_BLOCKSIZE = 1024*512
 
 class Responder(threading.Thread):
     def __init__(self, incoming=None):
@@ -18,7 +20,8 @@ class Responder(threading.Thread):
         self.index = Index()
         self.stop_event = threading.Event()
         self.observer = Observer()
-        self.handler = FileSystemEventHandler(self.incoming)
+        self.independent_handler = IndependentEventHandler(self.incoming)
+        self.requested_handler = RequestedEventHandler(self.incoming)
 
     def run(self):
         num_comm = 0
@@ -53,18 +56,14 @@ class Responder(threading.Thread):
         }
         # Case 2.1 - Client wants to watch a directory
         if action == "watch":
-            paths = message["path"]
-            succeeded,failed = self.watch(paths, channel)
-            response = {
-                "action" : "watching",
-                "id" : id,
-                "successful" : succeeded,
-                "failed" : failed
-            }
-        # Case 2.2 - Client wants server to modify its own file
+            response = self.handle_watch_request(message, channel)
+        elif  action == "request_hash":
+            response = self.handle_get_hash(message)
+        elif action == "sent_hash":
+            response = self.handle_get_delta(message)
+        # Case 2.2 - Remote wants server to modify its own file
         elif action == "modify":
-            path = message["path"]
-            hashes = message["hashes"]
+            response = self.handle_modify(message)
             #hashes = zlib.decompressobj(compressed_hashes)
             self.modify(path, hashes) #No response implemented
             response = {
@@ -85,27 +84,34 @@ class Responder(threading.Thread):
             return
         return response
 
-    def watch(self, paths, channel):
+    def handle_watch_request(self, message, channel):
+        paths = message["paths"]
         succeeded = []
         failed = []
         for path in paths:
-            watch = self.observer.schedule(self.handler, path)
+            watch = self.observer.schedule(self.requested_handler, path)
             succeeded.append(path)
             self.index.add(channel, paths)
-        return (succeeded,failed)
+        response = {
+            "action": "watching",
+            "id": id,
+            "successful": succeeded,
+            "failed": failed
+        }
+        return response
 
     def request_watch(self, paths, channel):
         remotes = []
         for local,remote in paths:
             remotes.append(remote)
+            self.index.add_paths(local, remote, channel)
+            self.observer.schedule(self.independent_handler, local)
         request = {
             "action": "watch",
             "id": 1,
-            "path": remotes
+            "paths": remotes
         }
         self.send(request, channel)
-        for local,remote in paths:
-            self.index.add_paths(local, remote, channel)
 
     def notify_all(self, path, id):
         channels = self.index.get_watchers(path)
@@ -135,8 +141,39 @@ class Responder(threading.Thread):
         #for channel in channels:
         #    self.send(response, channel)
 
-    def modify(self, path, hashes):
-        local_path = self.index.get_local(path)
+    def handle_get_hash(self, message):
+        path = message["path"]
+        try:
+            file = open(path, "r+b")
+        except FileNotFoundError:
+            local_file = open(local_path, "w+b")
+        with open(path, "rb") as stream:
+            hash = yield from rsync.blockchecksums(stream, blocksize=DEFAULT_BLOCKSIZE)
+        response = {
+            "action" : "sent_hash",
+            "id": message["id"],
+            "path" : path,
+            "hash" : hash
+        }
+        return response
+
+    def handle_get_delta(self, message):
+        path = message["path"]
+        hash = message["hash"]
+        with open(path, "rb") as stream:
+            delta = rsync.rsyncdelta(stream, hash, blocksize=DEFAULT_BLOCKSIZE, max_buffer=DEFAULT_BLOCKSIZE)
+        response = {
+            "action": "sent_hash",
+            "id": message["id"],
+            "path": path,
+            "delta": delta
+        }
+        return response
+
+    def handle_modify(self, message):
+        remote_path = message["path"]
+        delta = message["delta"]
+        local_path = self.index.get_local(remote_path)
         try:
             local_file = open(local_path, "r+b")
         except FileNotFoundError:

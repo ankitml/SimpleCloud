@@ -1,14 +1,30 @@
 == Message specification ==
 
 = Common =
-Change:
-    Request to change file or directory according to the hashes sent
+Request-checksums:
+    Notification that a file or directory has been changed
+    Requesting that recipient send in hashes for their corresponding file or directory
+    {
+        'action' : 'request_hash'
+        'id' : transaction ID
+        'path' : path
+    }
+Sent-checksum:
+    Response to Request-checksums containing the checksums for the file or directory
+    {
+        'action' : 'sent_hash'
+        'id' : transaction ID
+        'path' : path
+        'hash' : hashes
+    }
+Modify:
+    Request to change file or directory according to the delta sent, calculated from the checksums
     Transaction ID should be unique to the sender
     {
         'action' : 'modify'
         'id' : transaction ID
         'path' : path
-        'hashes' : hashes
+        'delta' : hashes
     }
 Changed:
     Notification for the recipient that sender has finished modifying his local file as requested

@@ -45,6 +45,9 @@ class Index:
     def get_watching(self, channel):
         return self.watching[channel]
 
+    # Conversion between local paths and remote paths
+    # Used by the party that requested a watch for converting
+    # the remote event path into a local path
     def add_paths(self, local_path, remote_path, channel):
         self.localpaths[remote_path] = (local_path, channel)
         self.remotepaths[local_path] = (remote_path, channel)

@@ -1,6 +1,8 @@
 import unittest
 import queue
-import os, time
+import os
+import time
+import shutil
 from watchdog.observers import Observer
 from src.common.EventHandler import FileSystemEventHandler
 
@@ -8,6 +10,10 @@ filename = "t1"
 local_dir = os.path.dirname(os.path.realpath(__file__))+"/local/"
 remote_dir = os.path.dirname(os.path.realpath(__file__))+"/remote/"
 string_common = "This line is in file "
+
+BIG_FILE = "/home/francisco/Firefox_wallpaper.png"
+TMP_DIR = "/tmp/SimpleCloud/"
+BIG_IN = os.path.join(TMP_DIR, "in.png")
 
 class WatchdogTests(unittest.TestCase):
 
@@ -17,8 +23,8 @@ class WatchdogTests(unittest.TestCase):
                 file.write(string_common+filename)
         self.tasks = queue.Queue()
         self.observer = Observer()
-        handler1 = FileSystemEventHandler(localRoot=local_dir, remoteRoot=remote_dir, tasks=self.tasks)
-        self.watch = self.observer.schedule(event_handler=handler1, path=local_dir)
+        self.handler = FileSystemEventHandler(self.tasks)
+        self.watch = self.observer.schedule(event_handler=self.handler, path=local_dir)
         self.observer.start()
 
     # Modifying the file should add a new task to the queue
@@ -41,7 +47,7 @@ class WatchdogTests(unittest.TestCase):
             def handle_modification(self, event):
                 self.tasks.put(fake_handle)
         fake_queue = queue.Queue()
-        fake_handler = FakeHandler(localRoot=local_dir, remoteRoot=remote_dir, tasks=fake_queue)
+        fake_handler = FakeHandler(fake_queue)
         self.observer.add_handler_for_watch(fake_handler, self.watch)
         new_string = "This is a whole new line in file " + filename
         with open(local_dir + filename, "w") as local_file:
@@ -87,7 +93,7 @@ class WatchdogTests(unittest.TestCase):
             remote_file.write("Going once")
         self.assertRaises(queue.Empty, self.tasks.get, timeout=1) # No Handler is watching the file yet
 
-        handler2 = FileSystemEventHandler(localRoot=remote_dir, remoteRoot=local_dir, tasks=self.tasks)
+        handler2 = FileSystemEventHandler(self.tasks)
         self.observer.schedule(event_handler=handler2, path=remote_dir, recursive=True)
 
         with open(remote_dir + filename, "w") as remote_file:
@@ -108,7 +114,7 @@ class WatchdogTests(unittest.TestCase):
 
     # It should be possible to remove a scheduled watch
     def testWatchRemoval(self):
-        handler2 = FileSystemEventHandler(localRoot=remote_dir, remoteRoot=local_dir, tasks=self.tasks)
+        handler2 = FileSystemEventHandler(self.tasks)
         watch2 = self.observer.schedule(event_handler=handler2, path=remote_dir, recursive=True)
         for client in [ {"path":local_dir+filename, "watch":self.watch},
                       {"path":remote_dir+filename, "watch":watch2} ]:
@@ -123,9 +129,7 @@ class WatchdogTests(unittest.TestCase):
                 local_file.write("This won't")
             self.assertRaises(queue.Empty, self.tasks.get, timeout=1)
 
-
-
-        # Each open() and each close() should produce an event
+    # Each open() and each close() should produce an event
     # They are sometimes squashed into a single event if done
     # Quickly enough (i.e. "with open(file) as f: f.write()")
     def testEventsPerWrite(self):
@@ -138,6 +142,18 @@ class WatchdogTests(unittest.TestCase):
         local_file.close()
         self.assertTrue(len(empty_tasks(self.tasks)) == 1) # Closing sets off an event
 
+    def testEventsForBigFileCopy(self):
+        self.observer.schedule(self.handler, TMP_DIR, recursive=True)
+        try:
+            os.mkdir(TMP_DIR)
+        except FileExistsError:
+            pass
+        try:
+            shutil.copy(BIG_FILE, BIG_IN)
+        except OSError:
+            self.fail()
+        num = empty_tasks(self.tasks)
+        print("Used "+str(len(num))+" events")
 
 if __name__ == "__main__":
     unittest.main()

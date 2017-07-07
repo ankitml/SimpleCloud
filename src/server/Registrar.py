@@ -7,8 +7,6 @@ import queue
 import selectors
 
 from src.server.SSHServer import SSHServer
-from src.server.Client import Client
-from src.common.EventHandler import FileSystemEventHandler
 from src.server.Responder import Responder
 
 """

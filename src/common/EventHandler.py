@@ -2,13 +2,24 @@ from watchdog.events import LoggingEventHandler as LoggingEventHandler_super, Fi
 import os
 import time
 
-class FileSystemEventHandler(FileSystemEventHandler_super):
+class IndependentEventHandler(FileSystemEventHandler_super):
 	def __init__(self, queue):
-		super(FileSystemEventHandler, self).__init__()
+		super(IndependentEventHandler, self).__init__()
 		self.queue = queue
 
 	def on_any_event(self, event):
-		print("[Handler] Received event "+str(event.event_type)+" on "+str(event.src_path))
+		print("[IndependentHandler] Event "+str(event.event_type)+" on "+str(event.src_path))
+		event.watch_type = "independent"
+		self.queue.put(event)
+
+class RequestedEventHandler(FileSystemEventHandler_super):
+	def __init__(self, queue):
+		super(RequestedEventHandler, self).__init__()
+		self.queue = queue
+
+	def on_any_event(self, event):
+		print("[RequestedHandler] Event " + str(event.event_type) + " on " + str(event.src_path))
+		event.watch_type = "requested"
 		self.queue.put(event)
 """
 	def on_moved(self, event):
