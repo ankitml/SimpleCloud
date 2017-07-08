@@ -1,66 +1,76 @@
 import threading
 import os
+import sqlite3
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEvent
+from src.common.EventHandler import EventHandler, ConvertingEventHandler
 
 class Index:
-    def __init__(self):
-        self.lock = threading.Lock()
-        # Server
-        self.watching = {} # channel-to-paths
-        self.watchers = {} # path-to-channels
-        # Client
-        self.localpaths = {} # remotepath-to-localpath
-        self.remotepaths = {}
+	def __init__(self):
+		self.database = sqlite3.connect(":memory:")
+		self.cursor = self.database.cursor()
+		self.init_db()
 
-    def add(self, channel, paths):
-        self.lock.acquire()
-        if channel in self.watching:
-            self.watching[channel].append(paths)
-        else:
-            self.watching[channel] = paths
-        for path in paths:
-            if path in self.watchers:
-                self.watchers[path].append(channel)
-            else:
-                self.watchers[path] = [ channel ]
-        self.lock.release()
+	def init_db(self):
+		commands = [
+			"PRAGMA foreign_keys = ON;",
+			"""CREATE TABLE channels
+				(channel_id INTEGER PRIMARY KEY),""",
+			"""CREATE TABLE watches
+				(path TEXT PRIMARY KEY, watch_id INTEGER)"""
+			"""CREATE TABLE recipients
+				(channel_id INTEGER REFERENCES channels(channel_id)
+					ON DELETE CASCADE ON UPDATE CASCADE,
+				local TEXT REFERENCES watches(path), remote TEXT)"""
+		]
+		for cmd in commands:
+			self.cursor.execute(cmd)
+		self.database.commit()
 
-    def remove(self, channel):
-        self.lock.acquire()
-        paths = self.watching.pop(channel)
-        for path in paths:
-            self.watchers[path].remove(channel)
-            if not self.watchers[path]:
-                self.watchers.pop(path)
-        self.lock.release()
+	def register_channel(self, channel_id):
+		self.cursor.execute("INSERT INTO channels VALUES (?)", (channel_id,))
+		self.database.commit()
 
-    def get_watchers(self, path):
-        watchers = []
-        for watched_path in self.watchers:
-            common = os.path.commonpath([watched_path, path])
-            if os.path.samefile(common, watched_path):
-                watchers.extend(self.watchers[watched_path])
-        return watchers
-        #return self.watchers[path]
+	# Unregisters a channel and removes all watches
+	def remove_channel(self, channel_id):
+		self.cursor.execute("DELETE FROM channels WHERE channel_id = ?", (channel_id,))
+		self.database.commit()
 
-    def get_watching(self, channel):
-        return self.watching[channel]
+	def add_watch(self, path, watch_id):
+		try:
+			self.cursor.execute("INSERT INTO watches VALUES (?,?)", (path, watch_id))
+			self.database.commit()
+		except sqlite3.IntegrityError:
+			print("[Index] Watch "+str(watch_id)+" probably already existed")
 
-    # Conversion between local paths and remote paths
-    # Used by the party that requested a watch for converting
-    # the remote event path into a local path
-    def add_paths(self, local_path, remote_path, channel):
-        self.localpaths[remote_path] = (local_path, channel)
-        self.remotepaths[local_path] = (remote_path, channel)
+	def get_watch_id(self, path):
+		watch = self.cursor.execute("SELECT watch_id FROM watches WHERE path = ?", (path))
+		return watch.fetchone()
 
-    def get_local(self, path):
-        for remotepath in self.localpaths:
-            common = os.path.commonpath([ remotepath, path ])
-            if os.path.samefile(common, remotepath):
-                local,_ = self.localpaths[remotepath]
-                diff = path.replace(remotepath, "")
-                localpath = os.path.join(local, diff)
-                print("Local path for "+path+" is "+localpath)
-                return localpath
+	def add_recipient(self, channel_id, paths):
+		try:
+			for local,remote in paths:
+				print(channel_id + " : " + local + " => " + remote)
+				try:
+					self.cursor.execute(
+						"INSERT INTO  VALUES (?,?,?)",
+						(channel_id, local, remote)
+					)
+				except sqlite3.IntegrityError:
+					print("[Index] Unable to insert "+str(channel_id)+
+						  " : "+local+" => "+remote)
+				self.database.commit()
+		except sqlite3.IntegrityError:
+			print("[Index] Failed to commit transaction")
 
-    def get_remote(self, path):
-        return self.remotepaths[path]
+	def get_watchers(self, path):
+		pass
+
+	def get_watching(self, channel):
+		pass
+
+	def get_local(self, path):
+		pass
+
+	def get_remotes(self, path, channel_id):
+		pass

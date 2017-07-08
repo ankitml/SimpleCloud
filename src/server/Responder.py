@@ -8,8 +8,8 @@ import os
 import pyrsync2 as rsync
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEvent
-from src.common.EventHandler import IndependentEventHandler, RequestedEventHandler
-from src.server.Index import Index
+from src.common.EventHandler import EventHandler, ConvertingEventHandler
+from src.server.Index_old import Index
 
 DEFAULT_BLOCKSIZE = 1024*512
 
@@ -20,8 +20,7 @@ class Responder(threading.Thread):
         self.index = Index()
         self.stop_event = threading.Event()
         self.observer = Observer()
-        self.independent_handler = IndependentEventHandler(self.incoming)
-        self.requested_handler = RequestedEventHandler(self.incoming)
+        self.channels = {}
 
     def run(self):
         num_comm = 0
@@ -32,9 +31,10 @@ class Responder(threading.Thread):
                 num_comm += 1
                 # Case 1 - local filesystem event, notify everyone watching
                 if isinstance(item, FileSystemEvent):
-                    path = item.src_path
-                    print("[Responder] Got event on "+str(item.src_path))
-                    self.notify_all(path, num_comm)
+                    self.handle_event(item)
+                    #path = item.src_path
+                    #print("[Responder] Got event on "+str(item.src_path))
+                    #self.notify_all(path, num_comm)
                 # Case 2 - received message from client
                 else:
                     channel = item["channel"]
@@ -46,6 +46,12 @@ class Responder(threading.Thread):
             except queue.Empty:
                 continue
         print("[Responder] Stopping")
+
+    def handle_event(self, event):
+        src_path = event.src_path
+        channel = self.channels[event.channel_id]
+        if event.convert_src:
+            src_paths = Index.get_remotes()
 
     def handle_message(self, message, channel):
         action = message["action"]
@@ -59,7 +65,7 @@ class Responder(threading.Thread):
             response = self.handle_watch_request(message, channel)
         elif  action == "request_hash":
             response = self.handle_get_hash(message)
-        elif action == "sent_hash":
+        elif action == "request_delta":
             response = self.handle_get_delta(message)
         # Case 2.2 - Remote wants server to modify its own file
         elif action == "modify":
@@ -84,12 +90,31 @@ class Responder(threading.Thread):
             return
         return response
 
+    def request_watch(self, paths, channel):
+        remotes = []
+        # Schedule local watch with conversion
+        for local,remote in paths:
+            remotes.append(remote)
+            self.index.add_paths(local, remote, channel)
+            channel_id = self.get_channel_id(channel)
+            handler = ConvertingEventHandler(self.incoming, channel_id, local, remote)
+            watch = self.observer.schedule(handler, local)
+        request = {
+            "action": "watch",
+            "id": 1,
+            "paths": remotes
+        }
+        self.send(request, channel)
+
     def handle_watch_request(self, message, channel):
         paths = message["paths"]
         succeeded = []
         failed = []
+        # Schedule watch with no conversion
+        channel_id = self.get_channel_id(channel)
         for path in paths:
-            watch = self.observer.schedule(self.requested_handler, path)
+            handler = EventHandler(self.incoming, channel_id)
+            watch = self.observer.schedule(handler, path)
             succeeded.append(path)
             self.index.add(channel, paths)
         response = {
@@ -100,47 +125,7 @@ class Responder(threading.Thread):
         }
         return response
 
-    def request_watch(self, paths, channel):
-        remotes = []
-        for local,remote in paths:
-            remotes.append(remote)
-            self.index.add_paths(local, remote, channel)
-            self.observer.schedule(self.independent_handler, local)
-        request = {
-            "action": "watch",
-            "id": 1,
-            "paths": remotes
-        }
-        self.send(request, channel)
-
-    def notify_all(self, path, id):
-        channels = self.index.get_watchers(path)
-        print(str(channels))
-        with open(path, "rb") as file:
-            for hash in rsync.blockchecksums(file):
-                #print(hash)
-                #compressed_hash = zlib.compressobj(hash)
-                message = {
-                  "id": id,
-                  "action": "modify",
-                  "path": path,
-                  "hashes": [hash]
-                }
-                #print(str(channels))
-                for channel in channels:
-                    self.send(message, channel)
-                #hashes = rsync.blockchecksums(file)
-        #compressed_hashes = zlib.compressobj(hashes)
-        #response = {
-        #    "id": id,
-        #    "action": "change",
-        #    "path": path,
-        #    "hashes": compressed_hashes
-        #}
-        #channels = self.Index[path]
-        #for channel in channels:
-        #    self.send(response, channel)
-
+    # Handle a message requesting the hashes for a path
     def handle_get_hash(self, message):
         path = message["path"]
         try:
@@ -150,13 +135,15 @@ class Responder(threading.Thread):
         with open(path, "rb") as stream:
             hash = yield from rsync.blockchecksums(stream, blocksize=DEFAULT_BLOCKSIZE)
         response = {
-            "action" : "sent_hash",
+            "action" : "request_delta",
             "id": message["id"],
             "path" : path,
             "hash" : hash
         }
         return response
 
+    # Handle a message containing hashes and requesting the delta between them
+    # and the hashes for a path
     def handle_get_delta(self, message):
         path = message["path"]
         hash = message["hash"]
@@ -187,6 +174,34 @@ class Responder(threading.Thread):
         # else:
         #     print("[Responder] Delta is null, files are equal")
 
+    def notify_all(self, path, id):
+        channels = self.index.get_watchers(path)
+        print(str(channels))
+        with open(path, "rb") as file:
+            for hash in rsync.blockchecksums(file):
+                #print(hash)
+                #compressed_hash = zlib.compressobj(hash)
+                message = {
+                  "id": id,
+                  "action": "modify",
+                  "path": path,
+                  "hashes": [hash]
+                }
+                #print(str(channels))
+                for channel in channels:
+                    self.send(message, channel)
+                #hashes = rsync.blockchecksums(file)
+        #compressed_hashes = zlib.compressobj(hashes)
+        #response = {
+        #    "id": id,
+        #    "action": "change",
+        #    "path": path,
+        #    "hashes": compressed_hashes
+        #}
+        #channels = self.Index[path]
+        #for channel in channels:
+        #    self.send(response, channel)
+
     @staticmethod
     def peek(delta):
         try:
@@ -198,6 +213,10 @@ class Responder(threading.Thread):
             print("[Responder] Delta is null")
             return None
         return itertools.chain([first], delta)
+
+    @staticmethod
+    def get_channel_id(channel):
+        return id(channel)
 
     @staticmethod
     def send(message, channel):

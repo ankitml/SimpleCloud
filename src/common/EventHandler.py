@@ -2,25 +2,35 @@ from watchdog.events import LoggingEventHandler as LoggingEventHandler_super, Fi
 import os
 import time
 
-class IndependentEventHandler(FileSystemEventHandler_super):
+# For requested watches
+class EventHandler(FileSystemEventHandler_super):
 	def __init__(self, queue):
-		super(IndependentEventHandler, self).__init__()
+		super(EventHandler, self).__init__()
+		#self.root = root
 		self.queue = queue
 
 	def on_any_event(self, event):
-		print("[IndependentHandler] Event "+str(event.event_type)+" on "+str(event.src_path))
-		event.watch_type = "independent"
+		# Get all channels interested in this event...
+		print("[Handler] Received event "+str(event.event_type)+" on "+str(event.src_path))
 		self.queue.put(event)
 
-class RequestedEventHandler(FileSystemEventHandler_super):
-	def __init__(self, queue):
-		super(RequestedEventHandler, self).__init__()
+# For independent watches
+class ConvertingEventHandler(FileSystemEventHandler_super):
+	def __init__(self, queue, channel_id, local_path, remote_path):
+		super(ConvertingEventHandler, self).__init__()
 		self.queue = queue
+		self.channel_id = channel_id
+		self.local_path = local_path
+		self.remote_path = remote_path
 
 	def on_any_event(self, event):
-		print("[RequestedHandler] Event " + str(event.event_type) + " on " + str(event.src_path))
-		event.watch_type = "requested"
-		self.queue.put(event)
+		src = event.src_path
+		src_converted = src.replace(self.local_path, self.remote_path)
+		event_converted = type(event)(src_converted)
+		event_converted.channel_id = self.channel_id
+		print("[Handler] Received event " + str(event_converted.event_type) + " on " + str(src) + " corresponding to " + str(src_converted) + " on destination")
+		self.queue.put(event_converted)
+
 """
 	def on_moved(self, event):
 		#source = self.localPathToRemote(event.src_path) + ("/" if event.is_directory else "")

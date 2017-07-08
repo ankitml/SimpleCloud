@@ -9,10 +9,10 @@ Request-checksums:
         'id' : transaction ID
         'path' : path
     }
-Sent-checksum:
+Request-delta:
     Response to Request-checksums containing the checksums for the file or directory
     {
-        'action' : 'sent_hash'
+        'action' : 'request_delta'
         'id' : transaction ID
         'path' : path
         'hash' : hashes
