@@ -5,7 +5,7 @@
 Cloud storage made simple.
 
 ## Current state:
-* SimpleCloud is on a development hiatus. I develop it alone and currently have very little free time.
+* Right now I'm focusing solely on implementing the zsync algorithm in Python, based on a pyrsync implementation, so we can have delta transfers. When this is done, I'll try to bring it to SimpleCloud.
 * The current codebase is not working yet.
 * The Registry is currently the most work-demanding component. We're going with Paramiko and the selectors module to asynchronously monitor each channel. ~~We're trying to adapt an async mechanism (async-ssh) for it for maximum efficiency, but it's proving to be very demanding, and there's almost nothing to base it on. It's also a very language-specific implementation. If this drags on, a one-thread-per-client Registry will be developed as a temporary solution using Paramiko. **Also the latest testing showed that async-ssh is unable to notice when a SSH channel has been improperly closed, which would be a dealbreaker to its use**~~
 
