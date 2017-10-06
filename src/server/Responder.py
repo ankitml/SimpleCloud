@@ -14,17 +14,16 @@ from src.common.EventHandler import EventHandler, ConvertingEventHandler
 DEFAULT_BLOCKSIZE = 1024*512
 
 class Responder(threading.Thread):
-    def __init__(self, index, incoming=None):
+    def __init__(self, index, channels, incoming, observer):
         threading.Thread.__init__(self)
         self.incoming = (incoming if incoming else queue.Queue())
         self.index = index
+        self.channels = channels
+        self.observer = observer
         self.stop_event = threading.Event()
-        self.observer = Observer()
-        self.channels = {}
 
     def run(self):
         num_comm = 0
-        self.observer.start()
         while not self.stop_event.is_set():
             try:
                 item = self.incoming.get(block=True, timeout=1)
@@ -49,9 +48,7 @@ class Responder(threading.Thread):
 
     def handle_event(self, event):
         src_path = event.src_path
-        channel = self.channels[event.channel_id]
-        if event.convert_src:
-            src_paths = Index.get_remotes()
+        self.index.get_watchers(src_path)
 
     def handle_message(self, message, channel):
         action = message["action"]

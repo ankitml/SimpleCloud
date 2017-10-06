@@ -6,6 +6,7 @@ import threading
 import queue
 import selectors
 
+from watchdog.observers import Observer
 from src.server.SSHServer import SSHServer
 from src.server.Responder import Responder
 from src.server.Index import Index
@@ -55,13 +56,15 @@ class Registrar(threading.Thread):
         self.selector = selectors.DefaultSelector()
         self.stop_event = threading.Event()
         self.index = Index()
-        self.responder = Responder(index=self.index, incoming=self.incoming)
+        self.observer = Observer()
         # Client functionality
         self.channels = {}
         self.paramiko_server = SSHServer(self.authorized_keys)
         # Client functionality
         self.clients = []
         self.to_watch = queue.Queue() # ???
+        # Responder threads
+        self.responder = Responder(index=self.index, channels=self.channels, incoming=self.incoming, observer=self.observer)
 
     def connect(self, host, port):
         client = paramiko.SSHClient()
@@ -84,6 +87,7 @@ class Registrar(threading.Thread):
         self.server_socket.listen(10)
         self.selector.register(self.server_socket, selectors.EVENT_READ)
         self.responder.start()
+        self.observer.start()
         print("[Server] All set, listening for SSH connections.")
         num_conn = 0
 
@@ -118,7 +122,7 @@ class Registrar(threading.Thread):
                         else:
                             data = pickle.loads(databin)
                             self.incoming.put({
-                                "channel": channel,
+                                "channel_id": channel_id,
                                 "message": data,
                             })
                             print("[Server] Received: " + str(data))

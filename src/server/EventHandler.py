@@ -8,6 +8,8 @@ class FileSystemEventHandler(FileSystemEventHandler_super):
 		self.messages = messages
 
 	def on_any_event(self, event):
+		self.messages.put(event)
+		return
 		message = {
 			"action" : "pull",
 			"path" : event.dest_path
