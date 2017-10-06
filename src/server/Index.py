@@ -15,9 +15,9 @@ class Index:
 		commands = [
 			"PRAGMA foreign_keys = ON;",
 			"""CREATE TABLE channels
-				(channel_id INTEGER PRIMARY KEY),""",
+				(channel_id INTEGER PRIMARY KEY)""",
 			"""CREATE TABLE watches
-				(path TEXT PRIMARY KEY, watch_id INTEGER)"""
+				(path TEXT PRIMARY KEY, watch_id INTEGER)""",
 			"""CREATE TABLE recipients
 				(channel_id INTEGER REFERENCES channels(channel_id)
 					ON DELETE CASCADE ON UPDATE CASCADE,
@@ -31,10 +31,15 @@ class Index:
 		self.cursor.execute("INSERT INTO channels VALUES (?)", (channel_id,))
 		self.database.commit()
 
-	# Unregisters a channel and removes all watches
+	# Unregisters a channel and removes all watches that only exist for that channel
 	def remove_channel(self, channel_id):
+		lone_watches = self.cursor.execute(
+			"""SELECT * FROM recipients WHERE channel_id=? AND watch_id IN
+					(SELECT watch_id FROM recipients GROUP BY watch_id HAVING COUNT(*)=1)""",
+			(channel_id,))
 		self.cursor.execute("DELETE FROM channels WHERE channel_id = ?", (channel_id,))
 		self.database.commit()
+
 
 	def add_watch(self, path, watch_id):
 		try:
@@ -64,6 +69,7 @@ class Index:
 			print("[Index] Failed to commit transaction")
 
 	def get_watchers(self, path):
+
 		pass
 
 	def get_watching(self, channel):

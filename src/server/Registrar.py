@@ -8,6 +8,7 @@ import selectors
 
 from src.server.SSHServer import SSHServer
 from src.server.Responder import Responder
+from src.server.Index import Index
 
 """
 == Functionality ==
@@ -53,11 +54,14 @@ class Registrar(threading.Thread):
         self.host_keys = host_keys
         self.selector = selectors.DefaultSelector()
         self.stop_event = threading.Event()
-        self.responder = Responder(incoming=self.incoming)
+        self.index = Index()
+        self.responder = Responder(index=self.index, incoming=self.incoming)
+        # Client functionality
+        self.channels = {}
         self.paramiko_server = SSHServer(self.authorized_keys)
         # Client functionality
         self.clients = []
-        self.to_watch = queue.Queue()
+        self.to_watch = queue.Queue() # ???
 
     def connect(self, host, port):
         client = paramiko.SSHClient()
@@ -81,6 +85,7 @@ class Registrar(threading.Thread):
         self.selector.register(self.server_socket, selectors.EVENT_READ)
         self.responder.start()
         print("[Server] All set, listening for SSH connections.")
+        num_conn = 0
 
         while not self.stop_event.is_set():
             events = self.selector.select(timeout=1)
@@ -95,15 +100,20 @@ class Registrar(threading.Thread):
                     client_channel = self.negotiate_channel(client_socket)
                     if not client_channel:
                         continue
+                    # Successful negotiation
+                    num_conn += 1
                     print("[Server] Now have secure channel with " + str(address))
-                    self.selector.register(client_channel, selectors.EVENT_READ, data={})
+                    self.index.register_channel(num_conn)
+                    self.channels[num_conn] = client_channel
+                    self.selector.register(client_channel, selectors.EVENT_READ, data={ "channel_id" : num_conn })
                 else:
+                    channel_id = key.data["channel_id"]
                     try:
                         databin = channel.recv(1024 ^ 2)
                         # 1.2 - Client disconnection
                         if not databin:
                             print("[Server] Disconnection")
-                            self.selector.unregister(channel)
+                            self.remove_channel(channel, channel_id)
                         # 1.3 - Client message
                         else:
                             data = pickle.loads(databin)
@@ -113,7 +123,7 @@ class Registrar(threading.Thread):
                             })
                             print("[Server] Received: " + str(data))
                     except socket.error:
-                        self.selector.unregister(channel)
+                        self.remove_channel(channel, channel_id)
 
             # 2 - Register connected server channels for observation
             while True:
@@ -123,6 +133,11 @@ class Registrar(threading.Thread):
                 except queue.Empty:
                     break
         print("[Registrar] Stopping")
+
+    def remove_channel(self, channel, channel_id):
+        self.index.remove_channel(channel_id)
+        self.selector.unregister(channel)
+        self.index.remove_channel(channel_id)
 
     def negotiate_channel(self, client_socket):
         handler = paramiko.Transport(client_socket)

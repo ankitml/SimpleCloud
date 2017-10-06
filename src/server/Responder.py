@@ -10,15 +10,14 @@ import pyzsync as zsync
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEvent
 from src.common.EventHandler import EventHandler, ConvertingEventHandler
-from src.server.Index_old import Index
 
 DEFAULT_BLOCKSIZE = 1024*512
 
 class Responder(threading.Thread):
-    def __init__(self, incoming=None):
+    def __init__(self, index, incoming=None):
         threading.Thread.__init__(self)
         self.incoming = (incoming if incoming else queue.Queue())
-        self.index = Index()
+        self.index = index
         self.stop_event = threading.Event()
         self.observer = Observer()
         self.channels = {}
