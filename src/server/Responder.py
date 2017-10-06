@@ -6,6 +6,7 @@ import zlib
 import itertools
 import os
 import pyrsync2 as rsync
+import pyzsync as zsync
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEvent
 from src.common.EventHandler import EventHandler, ConvertingEventHandler
@@ -29,7 +30,7 @@ class Responder(threading.Thread):
             try:
                 item = self.incoming.get(block=True, timeout=1)
                 num_comm += 1
-                # Case 1 - local filesystem event, notify everyone watching
+                # Case 1 - local filesystem event, notify everyone watching that path
                 if isinstance(item, FileSystemEvent):
                     self.handle_event(item)
                     #path = item.src_path
@@ -60,31 +61,29 @@ class Responder(threading.Thread):
             "action" : "Invalid message ("+action+")",
             "id": id
         }
-        # Case 2.1 - Client wants to watch a directory
+        # Case 2.1 - Remote requests watching a directory
         if action == "watch":
             response = self.handle_watch_request(message, channel)
-        elif  action == "request_hash":
-            response = self.handle_get_hash(message)
-        elif action == "request_delta":
-            response = self.handle_get_delta(message)
-        # Case 2.2 - Remote wants server to modify its own file
-        elif action == "modify":
-            response = self.handle_modify(message)
-            #hashes = zlib.decompressobj(compressed_hashes)
-            self.modify(path, hashes) #No response implemented
-            response = {
-                "action" : "modified",
-                "id" : id,
-                "path" : path
-            }
+        # Case 2.2 - Remote is now watching the requested directory
         elif action == "watching":
             successful = message["successful"]
             print("[Responder] Server is now watching "+str(successful))
             return
+        # Case 2.3 - Remote sent a list of hashes to compare to its local file
+        elif  action == "deliver_hashes":
+            response = self.handle_received_hashes(message)
+        # Case 2.4 - Remote is requesting blocks according to a list of indexes
+        elif action == "request_blocks":
+            response = self.handle_request_blocks(message)
+        # Case 2.5 - Remote has sent requested blocks
+        elif action == "deliver_blocks":
+            responde = self.handle_received_blocks(message)
+        # Case 2.6 - Remote has finished modifying its file as requested
         elif action == "modified":
             path = message["path"]
             print("[Responder] Remote done modifying correspondent to "+str(path))
             return
+        # A message sent by local was invalid
         elif action == "invalid":
             print("[Responder] Message "+str(id)+" was invalid")
             return
@@ -113,7 +112,7 @@ class Responder(threading.Thread):
         # Schedule watch with no conversion
         channel_id = self.get_channel_id(channel)
         for path in paths:
-            handler = EventHandler(self.incoming, channel_id)
+            handler = EventHandler(self.incoming)
             watch = self.observer.schedule(handler, path)
             succeeded.append(path)
             self.index.add(channel, paths)
@@ -126,7 +125,7 @@ class Responder(threading.Thread):
         return response
 
     # Handle a message requesting the hashes for a path
-    def handle_get_hash(self, message):
+    def handle_received_hashes(self, message):
         path = message["path"]
         try:
             file = open(path, "r+b")
@@ -144,7 +143,7 @@ class Responder(threading.Thread):
 
     # Handle a message containing hashes and requesting the delta between them
     # and the hashes for a path
-    def handle_get_delta(self, message):
+    def handle_request_blocks(self, message):
         path = message["path"]
         hash = message["hash"]
         with open(path, "rb") as stream:
@@ -157,16 +156,16 @@ class Responder(threading.Thread):
         }
         return response
 
-    def handle_modify(self, message):
+    def handle_received_blocks(self, message):
         remote_path = message["path"]
-        delta = message["delta"]
+        blocks = message["blocks"]
         local_path = self.index.get_local(remote_path)
+        local_path_result = local_path+"_temp"
         try:
             local_file = open(local_path, "r+b")
         except FileNotFoundError:
             local_file = open(local_path, "w+b")
-        delta = rsync.rsyncdelta(local_file, hashes)
-        rsync.patchstream(local_file, local_file, delta)
+        zsync.easy_patch(local_file, local_path_result, None, blocks)
         local_file.close()
         # delta = Responder.peek(delta)
         # if delta:

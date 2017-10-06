@@ -1,38 +1,37 @@
 == Message specification ==
 
 = Common =
-Request-checksums:
+Deliver hashlist:
     Notification that a file or directory has been changed
-    Requesting that recipient send in hashes for their corresponding file or directory
+    Sending a list of hashes for zsync matching
     {
-        'action' : 'request_hash'
-        'id' : transaction ID
-        'path' : path
+        "action" : "deliver_hashes"
+        "id" : transaction ID
+        "path" : path
+        "hashes" : list of (weak,strong) hash tuples
     }
-Request-delta:
-    Response to Request-checksums containing the checksums for the file or directory
+Request blocks:
+    Response to "deliver_hashes" containing a list of blocks that the recipient
+    should send back
     {
-        'action' : 'request_delta'
-        'id' : transaction ID
-        'path' : path
-        'hash' : hashes
+        "action" : "request_blocks"
+        "id" : transaction ID
+        "block_indexes" : indexes
     }
-Modify:
-    Request to change file or directory according to the delta sent, calculated from the checksums
-    Transaction ID should be unique to the sender
+Deliver blocks:
+    Response to "request_blocks" containing a partial or full list of the requested blocks
     {
-        'action' : 'modify'
-        'id' : transaction ID
-        'path' : path
-        'delta' : hashes
+        "action" : "deliver_blocks"
+        "id" : transaction ID
+        "blocks" : blocks
     }
 Changed:
     Notification for the recipient that sender has finished modifying his local file as requested
     Transaction ID should be the same as the request
     {
-        'action' : 'modified'
-        'id' : transaction ID
-        'path' : path
+        "action" : "modified"
+        "id" : transaction ID
+        "path" : path
     }
 
 = Client =
@@ -47,11 +46,11 @@ Watch:
 
 = Server =
 Watching:
-    Response to message Watch from the client indicating which of those paths are now watched and which aren't
+    Response to message Watch from the client indicating which of those paths are now watched and which aren"t
     Transaction ID should be the same as the request
     {
         "id" : transaction ID
-        'action' : 'watching'
-        'successful' : [list of paths watched for this client]
-        'failed' : [list of paths that failed to be watched]
+        "action" : "watching"
+        "successful" : [list of paths watched for this client]
+        "failed" : [list of paths that failed to be watched]
     }
