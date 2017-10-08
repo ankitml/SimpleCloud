@@ -9,39 +9,39 @@ import os
 import pyzsync as zsync
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEvent
-from src.common.EventHandler import EventHandler, ConvertingEventHandler
 
 DEFAULT_BLOCKSIZE = 1024*512
 
 class Responder(threading.Thread):
-    def __init__(self, index, channels, incoming, observer):
+    def __init__(self, index, channels, incoming, observer, handler):
         threading.Thread.__init__(self)
         self.incoming = (incoming if incoming else queue.Queue())
         self.index = index
         self.channels = channels
         self.observer = observer
         self.stop_event = threading.Event()
+        self.handler = handler
 
     def run(self):
         num_comm = 0
         while not self.stop_event.is_set():
             try:
-                item = self.incoming.get(block=True, timeout=1)
+                action,channel_id,message = self.incoming.get(block=True, timeout=1)
                 num_comm += 1
+                print("[Responder] Received " + str(message)+" from "+str(channel_id))
+                if action == "respond":
+                    response = self.handle_message(message, channel_id)
+                else:
+                    response = message
+                if response:
+                    self.send(response, channel_id)
                 # Case 1 - local filesystem event, notify everyone watching that path
-                if isinstance(item, FileSystemEvent):
-                    self.handle_event(item)
+                #if isinstance(item, FileSystemEvent):
+                #    self.handle_event(item)
                     #path = item.src_path
                     #print("[Responder] Got event on "+str(item.src_path))
                     #self.notify_all(path, num_comm)
                 # Case 2 - received message from client
-                else:
-                    channel = item["channel"]
-                    message = item["message"]
-                    print("[Responder] Received "+str(message))
-                    response = self.handle_message(message, channel)
-                    if response:
-                        self.send(response, channel)
             except queue.Empty:
                 continue
         print("[Responder] Stopping")
@@ -50,21 +50,25 @@ class Responder(threading.Thread):
         src_path = event.src_path
         self.index.get_watchers(src_path)
 
-    def handle_message(self, message, channel):
+    def handle_message(self, message, channel_id):
         action = message["action"]
-        id = message["id"]
+        #id = message["id"]
         response = {
-            "action" : "Invalid message ("+action+")",
-            "id": id
+            "action" : "invalid",
+            "message" : "Invalid message ("+action+")"
+            #"id": id
         }
         # Case 2.1 - Remote requests watching a directory
         if action == "watch":
-            response = self.handle_watch_request(message, channel)
-
+            response = self.handle_watch_request(message["paths"], channel_id)
         # Case 2.2 - Remote is now watching the requested directories
         elif action == "watching":
             successful = message["successful"]
-            print("[Responder] Server is now watching "+str(successful))
+            print("[Responder] "+str(channel_id)+" is now watching "+str(successful))
+            return
+        elif action == "pull":
+            # response = self.request_hashes
+            print("[Responder] "+str(channel_id)+" wants me to patch "+message["path"])
             return
         # Case 2.3 - Remote sent a list of hashes to compare to its local file
         elif  action == "deliver_hashes":
@@ -82,41 +86,46 @@ class Responder(threading.Thread):
             return
         # A message sent by local was invalid
         elif action == "invalid":
-            print("[Responder] Message "+str(id)+" was invalid")
+            print("[Responder] My message was invalid: "+message["message"])
             return
         return response
 
-    def request_watch(self, paths, channel):
-        remotes = []
+    def request_watch(self, paths, channel_id):
+        succeeded = []
         # Schedule local watch with conversion
         for local,remote in paths:
-            remotes.append(remote)
-            self.index.add_paths(local, remote, channel)
-            channel_id = self.get_channel_id(channel)
-            handler = ConvertingEventHandler(self.incoming, channel_id, local, remote)
-            watch = self.observer.schedule(handler, local)
+            local = os.path.abspath(local)
+            remote = os.path.abspath(remote)
+            try:
+                watch = self.observer.schedule(self.handler, local)
+            except OSError:
+                continue
+            succeeded.append((id(watch), local, remote))
+        self.index.add_watches(channel_id, succeeded)
         request = {
             "action": "watch",
             "id": 1,
-            "paths": remotes
+            "paths": [watch[2] for watch in succeeded]
         }
-        self.send(request, channel)
+        self.send(request, channel_id)
 
-    def handle_watch_request(self, message, channel):
-        paths = message["paths"]
+    def handle_watch_request(self, paths, channel_id):
         succeeded = []
         failed = []
         # Schedule watch with no conversion
-        channel_id = self.get_channel_id(channel)
         for path in paths:
-            handler = EventHandler(self.incoming)
-            watch = self.observer.schedule(handler, path)
-            succeeded.append(path)
-        self.index.add(channel, succeeded)
+            path = os.path.abspath(path)
+            try:
+                watch = self.observer.schedule(self.handler, path)
+            except OSError:
+                failed.append(path)
+                continue
+            succeeded.append((id(watch), path, path))
+        self.index.add_watches(channel_id, succeeded)
         response = {
             "action": "watching",
             "id": id,
-            "successful": succeeded,
+            "successful": [watch[1] for watch in succeeded],
             "failed": failed
         }
         return response
@@ -214,8 +223,8 @@ class Responder(threading.Thread):
     def get_channel_id(channel):
         return id(channel)
 
-    @staticmethod
-    def send(message, channel):
+    def send(self, message, channel_id):
+        channel = self.channels[channel_id]
         messagebin = pickle.dumps(message)
         if channel.send_ready():
             try:

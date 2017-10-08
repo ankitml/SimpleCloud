@@ -9,18 +9,18 @@ class FileSystemEventHandler(FileSystemEventHandler_super):
 		self.messages = messages
 
 	def on_any_event(self, event):
-		watchers = self.index.get
-		message = {
-			"action": "pull",
-			"path": event.dest_path
-		}
-		self.messages.put(message)
-		return
-		message = {
-			"action" : "pull",
-			"path" : event.dest_path
-		}
-		self.messages.put(message)
+		watchers = self.index.get_watchers(event.src_path)
+		print("[Handler] Event of type "+event.event_type+
+			  " in "+event.src_path+". Sending to "+str(watchers))
+		for channel_id,path in watchers:
+			self.messages.put((
+				"send",
+				channel_id,
+				{
+					"action" : "pull",
+					"path" : path
+				}
+			))
 
 	def get_messages(self):
 		return self.messages

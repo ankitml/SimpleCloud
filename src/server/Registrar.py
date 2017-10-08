@@ -7,8 +7,10 @@ import queue
 import selectors
 
 from watchdog.observers import Observer
+from src.server.EventHandler import FileSystemEventHandler
 from src.server.SSHServer import SSHServer
 from src.server.Responder import Responder
+
 from src.server.Index import Index
 
 """
@@ -54,6 +56,7 @@ class Registrar(threading.Thread):
         self.authorized_keys = authorized_keys
         self.host_keys = host_keys
         self.selector = selectors.DefaultSelector()
+        self.num_conn = 0
         self.stop_event = threading.Event()
         self.index = Index()
         self.observer = Observer()
@@ -64,7 +67,8 @@ class Registrar(threading.Thread):
         self.clients = []
         self.to_watch = queue.Queue() # ???
         # Responder threads
-        self.responder = Responder(index=self.index, channels=self.channels, incoming=self.incoming, observer=self.observer)
+        handler = FileSystemEventHandler(self.index, self.incoming)
+        self.responder = Responder(index=self.index, channels=self.channels, incoming=self.incoming, observer=self.observer, handler=handler)
 
     def connect(self, host, port):
         client = paramiko.SSHClient()
@@ -89,7 +93,6 @@ class Registrar(threading.Thread):
         self.responder.start()
         self.observer.start()
         print("[Server] All set, listening for SSH connections.")
-        num_conn = 0
 
         while not self.stop_event.is_set():
             events = self.selector.select(timeout=1)
@@ -105,11 +108,8 @@ class Registrar(threading.Thread):
                     if not client_channel:
                         continue
                     # Successful negotiation
-                    num_conn += 1
                     print("[Server] Now have secure channel with " + str(address))
-                    self.index.register_channel(num_conn)
-                    self.channels[num_conn] = client_channel
-                    self.selector.register(client_channel, selectors.EVENT_READ, data={ "channel_id" : num_conn })
+                    self.register_channel(client_channel)
                 else:
                     channel_id = key.data["channel_id"]
                     try:
@@ -121,10 +121,10 @@ class Registrar(threading.Thread):
                         # 1.3 - Client message
                         else:
                             data = pickle.loads(databin)
-                            self.incoming.put({
-                                "channel_id": channel_id,
-                                "message": data,
-                            })
+                            self.incoming.put((
+                                "respond",
+                                channel_id,
+                                data))
                             print("[Server] Received: " + str(data))
                     except socket.error:
                         self.remove_channel(channel, channel_id)
@@ -132,14 +132,20 @@ class Registrar(threading.Thread):
             # 2 - Register connected server channels for observation
             while True:
                 try:
-                    channel = self.to_watch.get(block=False)
-                    self.selector.register(channel, selectors.EVENT_READ, data={})
+                    server_channel = self.to_watch.get(block=False)
+                    self.register_channel(server_channel)
                 except queue.Empty:
                     break
         print("[Registrar] Stopping")
 
+    def register_channel(self, channel):
+        self.num_conn += 1
+        self.index.add_channel(self.num_conn)
+        self.channels[self.num_conn] = channel
+        self.selector.register(channel, selectors.EVENT_READ, data={"channel_id": self.num_conn})
+        print("Added channel #"+str(self.num_conn))
+
     def remove_channel(self, channel, channel_id):
-        self.index.remove_channel(channel_id)
         self.selector.unregister(channel)
         self.index.remove_channel(channel_id)
 
@@ -155,9 +161,6 @@ class Registrar(threading.Thread):
         #server_socket.listen(100)
         server_socket.bind((address, port))
         return server_socket
-
-    def request_watch(self, paths, channel):
-        self.responder.request_watch(paths, channel)
 
     def stop(self):
         self.stop_event.set()
@@ -193,9 +196,20 @@ if __name__ == '__main__':
             host = "localhost"
             port = int(remote)
             channel = registrar.connect(host, port)
-            registrar.request_watch([("/home/francisco/.temp/dir_client", "/home/francisco/.temp/dir_server/")], channel)
-
-        while True:
-            time.sleep(10)
+            while True:
+                action = input("R - request watch | T - touch /home/francisco/.temp/dir_client/file1\n")
+                if action in ["R","r"]:
+                    channel_id = list(registrar.channels.keys())[0]
+                    registrar.responder.request_watch(
+                        [("/home/francisco/.temp/dir_client",
+                        "/home/francisco/.temp/dir_server/")],
+                        channel_id)
+                elif action in ["T","t"]:
+                    with open("/home/francisco/.temp/dir_client/file1","w") as myfile:
+                        myfile.write("ola")
+                time.sleep(0.5)
+        else:
+            while True:
+                time.sleep(10)
     except KeyboardInterrupt:
         registrar.stop()
