@@ -3,12 +3,18 @@ import os
 import time
 
 class FileSystemEventHandler(FileSystemEventHandler_super):
-	def __init__(self, messages):
+	def __init__(self, index, messages):
 		super(FileSystemEventHandler, self).__init__()
+		self.index = index
 		self.messages = messages
 
 	def on_any_event(self, event):
-		self.messages.put(event)
+		watchers = self.index.get
+		message = {
+			"action": "pull",
+			"path": event.dest_path
+		}
+		self.messages.put(message)
 		return
 		message = {
 			"action" : "pull",
