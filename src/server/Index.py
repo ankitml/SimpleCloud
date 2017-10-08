@@ -21,13 +21,13 @@ class Index:
 			"""CREATE TABLE recipients
 				(channel_id INTEGER REFERENCES channels(channel_id)
 					ON DELETE CASCADE ON UPDATE CASCADE,
-				local TEXT REFERENCES watches(path), remote TEXT)"""
+				local_path TEXT REFERENCES watches(path), remote_path TEXT)"""
 		]
 		for cmd in commands:
 			self.cursor.execute(cmd)
 		self.database.commit()
 
-	def register_channel(self, channel_id):
+	def add_channel(self, channel_id):
 		self.cursor.execute("INSERT INTO channels VALUES (?)", (channel_id,))
 		self.database.commit()
 
@@ -52,6 +52,8 @@ class Index:
 		watch = self.cursor.execute("SELECT watch_id FROM watches WHERE path = ?", (path))
 		return watch.fetchone()
 
+	# Before adding a recipient, there should be a watch already going on
+	# and the channel should already be registered
 	def add_recipient(self, channel_id, paths):
 		try:
 			for local,remote in paths:
@@ -69,11 +71,17 @@ class Index:
 			print("[Index] Failed to commit transaction")
 
 	def get_watchers(self, path):
-
-		pass
+		watchers = self.cursor.execute(
+			"""SELECT channel_id FROM recipients WHERE ? LIKE local_path||'%'""",
+			(path,)
+		)
+		return watchers.fetchall()
 
 	def get_watching(self, channel):
-		pass
+		self.cursor.execute(
+			"""SELECT local_path FROM recipients JOIN watches WHERE channel_id = ?""",
+			(channel,)
+		)
 
 	def get_local(self, path):
 		pass

@@ -5,7 +5,7 @@ import queue
 import zlib
 import itertools
 import os
-import pyrsync2 as rsync
+#import pyrsync2 as rsync
 import pyzsync as zsync
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEvent
@@ -60,7 +60,8 @@ class Responder(threading.Thread):
         # Case 2.1 - Remote requests watching a directory
         if action == "watch":
             response = self.handle_watch_request(message, channel)
-        # Case 2.2 - Remote is now watching the requested directory
+
+        # Case 2.2 - Remote is now watching the requested directories
         elif action == "watching":
             successful = message["successful"]
             print("[Responder] Server is now watching "+str(successful))
@@ -111,7 +112,7 @@ class Responder(threading.Thread):
             handler = EventHandler(self.incoming)
             watch = self.observer.schedule(handler, path)
             succeeded.append(path)
-            self.index.add(channel, paths)
+        self.index.add(channel, succeeded)
         response = {
             "action": "watching",
             "id": id,

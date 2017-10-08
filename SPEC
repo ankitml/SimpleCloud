@@ -1,33 +1,38 @@
 == Message specification ==
 
 = Common =
-Deliver hashlist:
+Event:
+    "One of my files just changed, here are the hashes"
     Notification that a file or directory has been changed
-    Sending a list of hashes for zsync matching
+    Sending hashlist for that file/dir to recipient
     {
-        "action" : "deliver_hashes"
-        "id" : transaction ID
-        "path" : path
-        "hashes" : list of (weak,strong) hash tuples
+        'action' : 'event'
+        'id' : transaction ID
+        'path' : path
+        'hashes' : hashes
     }
-Request blocks:
-    Response to "deliver_hashes" containing a list of blocks that the recipient
-    should send back
+Request-delta:
+    "Ok thanks for telling me, get me these blocks from that file"
+    Response to Event containing a list of blocks that are to be requested
+    Can be a partitioned message (i of N)
     {
-        "action" : "request_blocks"
-        "id" : transaction ID
-        "block_indexes" : indexes
+        'action' : 'request_delta'
+        'id' : transaction ID
+        'path' : path
+        'blocks' : blocks
     }
-Deliver blocks:
-    Response to "request_blocks" containing a partial or full list of the requested blocks
+Delta:
+    "Here are the blocks you asked for"
+    Response to Event containing a list of blocks that are to be requested
     {
-        "action" : "deliver_blocks"
-        "id" : transaction ID
-        "blocks" : blocks
+        'action' : 'delta'
+        'id' : transaction ID
+        'path' : path
+        'blocks' : blocks
     }
-Changed:
+Patched:
+    "Thanks, I'm done patching that file now"
     Notification for the recipient that sender has finished modifying his local file as requested
-    Transaction ID should be the same as the request
     {
         "action" : "modified"
         "id" : transaction ID
