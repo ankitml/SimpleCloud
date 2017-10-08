@@ -19,7 +19,7 @@ Request-delta:
         'action' : 'request_delta'
         'id' : transaction ID
         'path' : path
-        'blocks' : blocks
+        'delta' : blocks
     }
 Delta:
     "Here are the blocks you asked for"

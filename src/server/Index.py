@@ -23,7 +23,11 @@ class Index:
 			"""CREATE TABLE recipients
 				(channel_id INTEGER REFERENCES channels(channel_id)
 					ON DELETE CASCADE ON UPDATE CASCADE,
-				local_path TEXT REFERENCES watches(path), remote_path TEXT)"""
+				local_path TEXT REFERENCES watches(path), remote_path TEXT)""",
+			"""CREATE TABLE instructions
+				(path TEXT
+				channel_id REFERENCES channels(channel_id),
+				instructions BLOB)"""
 		]
 		for cmd in commands:
 			cursor.execute(cmd)
@@ -115,3 +119,20 @@ class Index:
 
 	def get_remotes(self, path, channel_id):
 		pass
+
+	def add_instructions(self, path, channel_id, instructions_bin):
+		cursor = self.database.cursor()
+		cursor.execute(
+			"""INSERT INTO instructions VALUES (?,?,?)""",
+			(path,channel_id,instructions_bin,)
+		)
+		self.database.commit()
+
+	def get_instructions(self, path, channel_id):
+		cursor = self.database.cursor()
+		instructions_bin = cursor.execute(
+			"""SELECT instructions FROM instructions
+				WHERE path=? AND channel_id = ?""",
+			(path, channel_id)
+		)
+		return instructions_bin.fetchone()

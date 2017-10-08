@@ -26,31 +26,20 @@ class Responder(threading.Thread):
         num_comm = 0
         while not self.stop_event.is_set():
             try:
-                action,channel_id,message = self.incoming.get(block=True, timeout=1)
+                side,channel_id,message = self.incoming.get(block=True, timeout=1)
                 num_comm += 1
                 print("[Responder] Received " + str(message)+" from "+str(channel_id))
-                if action == "respond":
-                    response = self.handle_message(message, channel_id)
-                else:
+                if side == "respond": # I received this message and should respond
+                    response = self.get_response(message, channel_id)
+                else: # side == "send" I am supposed to send this message
                     response = message
                 if response:
                     self.send(response, channel_id)
-                # Case 1 - local filesystem event, notify everyone watching that path
-                #if isinstance(item, FileSystemEvent):
-                #    self.handle_event(item)
-                    #path = item.src_path
-                    #print("[Responder] Got event on "+str(item.src_path))
-                    #self.notify_all(path, num_comm)
-                # Case 2 - received message from client
             except queue.Empty:
                 continue
         print("[Responder] Stopping")
 
-    def handle_event(self, event):
-        src_path = event.src_path
-        self.index.get_watchers(src_path)
-
-    def handle_message(self, message, channel_id):
+    def get_response(self, message, channel_id):
         action = message["action"]
         #id = message["id"]
         response = {
@@ -66,19 +55,16 @@ class Responder(threading.Thread):
             successful = message["successful"]
             print("[Responder] "+str(channel_id)+" is now watching "+str(successful))
             return
-        elif action == "pull":
-            # response = self.request_hashes
-            print("[Responder] "+str(channel_id)+" wants me to patch "+message["path"])
-            return
-        # Case 2.3 - Remote sent a list of hashes to compare to its local file
-        elif  action == "deliver_hashes":
-            response = self.handle_received_hashes(message)
+        elif action == "event":
+            print("[Responder] " + str(channel_id) + " wants me to patch " + message["path"])
+            response = self.handle_event(message)
         # Case 2.4 - Remote is requesting blocks according to a list of indexes
-        elif action == "request_blocks":
+        elif action == "request_delta":
+            print("[Responder] " + str(channel_id) + " wants blocks for file " + message["path"])
             response = self.handle_request_blocks(message)
         # Case 2.5 - Remote has sent requested blocks
         elif action == "deliver_blocks":
-            responde = self.handle_received_blocks(message)
+            response = self.handle_received_blocks(message)
         # Case 2.6 - Remote has finished modifying its file as requested
         elif action == "modified":
             path = message["path"]
@@ -89,6 +75,51 @@ class Responder(threading.Thread):
             print("[Responder] My message was invalid: "+message["message"])
             return
         return response
+
+    # Handles a message notifying of a remote event with a
+    # list of hashes for that file
+    # Responds by asking for the delta for that file
+    def handle_event(self, message, channel_id):
+        pass
+        hashes = message["hashes"]
+        path = message["path"]
+        with open(path, "rb") as unpatched:
+            instructions,request = zsync.zsync_delta(unpatched, hashes)
+        # save instructions + request in Index
+        self.index.add_instructions(
+            path, channel_id, pickle.dumps(instructions))
+        return {
+            "action" : "request_delta",
+            "path" : path,
+            "delta" : request
+        }
+
+    # Handle a message containing hashes and requesting the
+    # delta between them and the hashes for a path
+    def handle_request_delta(self, message):
+        path = message["path"]
+        delta = message["delta"]
+        with open(path, "rb") as stream:
+            blocks = zsync.get_blocks(stream, delta)
+        response = {
+            "action": "delta",
+            "id": message["id"],
+            "path": path,
+            "blocks": blocks
+        }
+        return response
+
+    def handle_received_blocks(self, message):
+        remote_path = message["path"]
+        blocks = message["blocks"]
+        local_path = self.index.get_local(remote_path)
+        local_path_result = local_path + "_temp"
+        try:
+            local_file = open(local_path, "r+b")
+        except FileNotFoundError:
+            local_file = open(local_path, "w+b")
+        zsync.easy_patch(local_file, local_path_result, None, blocks)
+        local_file.close()
 
     def request_watch(self, paths, channel_id):
         succeeded = []
@@ -131,53 +162,21 @@ class Responder(threading.Thread):
         return response
 
     # Handle a message requesting the hashes for a path
-    def handle_received_hashes(self, message):
-        path = message["path"]
-        try:
-            file = open(path, "r+b")
-        except FileNotFoundError:
-            local_file = open(local_path, "w+b")
-        with open(path, "rb") as stream:
-            hash = yield from rsync.blockchecksums(stream, blocksize=DEFAULT_BLOCKSIZE)
-        response = {
-            "action" : "request_delta",
-            "id": message["id"],
-            "path" : path,
-            "hash" : hash
-        }
-        return response
-
-    # Handle a message containing hashes and requesting the delta between them
-    # and the hashes for a path
-    def handle_request_blocks(self, message):
-        path = message["path"]
-        hash = message["hash"]
-        with open(path, "rb") as stream:
-            delta = rsync.rsyncdelta(stream, hash, blocksize=DEFAULT_BLOCKSIZE, max_buffer=DEFAULT_BLOCKSIZE)
-        response = {
-            "action": "sent_hash",
-            "id": message["id"],
-            "path": path,
-            "delta": delta
-        }
-        return response
-
-    def handle_received_blocks(self, message):
-        remote_path = message["path"]
-        blocks = message["blocks"]
-        local_path = self.index.get_local(remote_path)
-        local_path_result = local_path+"_temp"
-        try:
-            local_file = open(local_path, "r+b")
-        except FileNotFoundError:
-            local_file = open(local_path, "w+b")
-        zsync.easy_patch(local_file, local_path_result, None, blocks)
-        local_file.close()
-        # delta = Responder.peek(delta)
-        # if delta:
-        #     print("[Responder] Delta is not null, modifying")
-        # else:
-        #     print("[Responder] Delta is null, files are equal")
+    # def handle_received_hashes(self, message):
+    #     path = message["path"]
+    #     try:
+    #         file = open(path, "r+b")
+    #     except FileNotFoundError:
+    #         local_file = open(local_path, "w+b")
+    #     with open(path, "rb") as stream:
+    #         hash = yield from zsync.blockchecksums(stream, blocksize=DEFAULT_BLOCKSIZE)
+    #     response = {
+    #         "action" : "request_delta",
+    #         "id": message["id"],
+    #         "path" : path,
+    #         "hash" : hash
+    #     }
+    #     return response
 
     def notify_all(self, path, id):
         channels = self.index.get_watchers(path)

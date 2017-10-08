@@ -1,6 +1,7 @@
 from watchdog.events import LoggingEventHandler as LoggingEventHandler_super, FileSystemEventHandler as FileSystemEventHandler_super, FileSystemMovedEvent
 import os
 import time
+import pyzsync as zsync
 
 class FileSystemEventHandler(FileSystemEventHandler_super):
 	def __init__(self, index, messages):
@@ -9,7 +10,10 @@ class FileSystemEventHandler(FileSystemEventHandler_super):
 		self.messages = messages
 
 	def on_any_event(self, event):
-		watchers = self.index.get_watchers(event.src_path)
+		source = event.src_path
+		with open(source, "rb") as file:
+			hashes = zsync.block_checksums(file)
+		watchers = self.index.get_watchers(source)
 		print("[Handler] Event of type "+event.event_type+
 			  " in "+event.src_path+". Sending to "+str(watchers))
 		for channel_id,path in watchers:
@@ -17,8 +21,10 @@ class FileSystemEventHandler(FileSystemEventHandler_super):
 				"send",
 				channel_id,
 				{
-					"action" : "pull",
-					"path" : path
+					"action" : "event",
+					"event" : event.event_type,
+					"path" : path,
+					"hashes" : hashes
 				}
 			))
 
