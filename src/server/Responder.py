@@ -57,11 +57,11 @@ class Responder(threading.Thread):
             return
         elif action == "event":
             print("[Responder] " + str(channel_id) + " wants me to patch " + message["path"])
-            response = self.handle_event(message)
+            response = self.handle_event(message, channel_id)
         # Case 2.4 - Remote is requesting blocks according to a list of indexes
         elif action == "request_delta":
             print("[Responder] " + str(channel_id) + " wants blocks for file " + message["path"])
-            response = self.handle_request_blocks(message)
+            response = self.handle_request_delta(message, channel_id)
         # Case 2.5 - Remote has sent requested blocks
         elif action == "deliver_blocks":
             response = self.handle_received_blocks(message)
@@ -82,7 +82,8 @@ class Responder(threading.Thread):
     def handle_event(self, message, channel_id):
         pass
         hashes = message["hashes"]
-        path = message["path"]
+        remote_path = message["path"]
+        path = self.index.get_local(remote_path, channel_id)
         with open(path, "rb") as unpatched:
             instructions,request = zsync.zsync_delta(unpatched, hashes)
         # save instructions + request in Index
@@ -90,14 +91,15 @@ class Responder(threading.Thread):
             path, channel_id, pickle.dumps(instructions))
         return {
             "action" : "request_delta",
-            "path" : path,
+            "path" : remote_path,
             "delta" : request
         }
 
     # Handle a message containing hashes and requesting the
     # delta between them and the hashes for a path
-    def handle_request_delta(self, message):
-        path = message["path"]
+    def handle_request_delta(self, message, channel_id):
+        remote_path = message["path"]
+        path = self.index.get_local(remote_path, channel_id)
         delta = message["delta"]
         with open(path, "rb") as stream:
             blocks = zsync.get_blocks(stream, delta)
@@ -109,10 +111,10 @@ class Responder(threading.Thread):
         }
         return response
 
-    def handle_received_blocks(self, message):
+    def handle_received_blocks(self, message, channel_id):
         remote_path = message["path"]
         blocks = message["blocks"]
-        local_path = self.index.get_local(remote_path)
+        path = self.index.get_local(remote_path, channel_id)
         local_path_result = local_path + "_temp"
         try:
             local_file = open(local_path, "r+b")

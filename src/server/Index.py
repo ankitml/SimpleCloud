@@ -109,16 +109,20 @@ class Index:
 	def get_watching(self, channel):
 		cursor = self.database.cursor()
 		paths = cursor.execute(
-			"""SELECT local_path FROM recipients JOIN watches WHERE channel_id = ?""",
+			"""SELECT local_path FROM recipients WHERE channel_id = ?""",
 			(channel,)
 		)
-		return paths.fetchall()
+		return [ path[0] for path in paths.fetchall() ]
 
-	def get_local(self, path):
-		pass
-
-	def get_remotes(self, path, channel_id):
-		pass
+	# Get the local path for a (path, channel_id) pair
+	def get_local(self, path, channel_id):
+		cursor = self.database.cursor()
+		local_path = cursor.execute(
+			"""SELECT REPLACE(?, remote_path, local_path) FROM recipients
+				WHERE channel_id=? AND ? LIKE remote_path||'%'""",
+			(path, channel_id, path,)
+		).fetchone()
+		return local_path
 
 	def add_instructions(self, path, channel_id, instructions_bin):
 		cursor = self.database.cursor()
