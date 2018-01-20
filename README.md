@@ -5,9 +5,9 @@
 Cloud storage made simple.
 
 ## Current state:
-* Right now I'm focusing solely on implementing the zsync algorithm in Python, based on a pyrsync implementation, so we can have delta transfers. When this is done, I'll try to bring it to SimpleCloud.
-* The current codebase is not working yet.
-* The Registry is currently the most work-demanding component. We're going with Paramiko and the selectors module to asynchronously monitor each channel. ~~We're trying to adapt an async mechanism (async-ssh) for it for maximum efficiency, but it's proving to be very demanding, and there's almost nothing to base it on. It's also a very language-specific implementation. If this drags on, a one-thread-per-client Registry will be developed as a temporary solution using Paramiko. **Also the latest testing showed that async-ssh is unable to notice when a SSH channel has been improperly closed, which would be a dealbreaker to its use**~~
+* I'm on hiatus from contributing directly. That means some code is getting typed on my computer, but until I have something worthwhile, I won't commit.
+* I'm specifically looking into a using webserver that supports websockets. The idea is that a) webservers are more polished than publishing a socket and then handling connections and disconnections; and b) websockets allow bidirectional traffic which is much better than polling a server every second. However there are a lot of solutions available (Flask+SocketIO, Autobahn, Django Channels) and they all pretty much require implementing things that I believe should be done by an expert.
+* SSL support is another hurdle, since I can't ensure a certain node will have a certificate or even a private key on a file. Also I will need to override the typical SSL authentication to match that of OpenSSH. For example, I don't really care about asking a CA if Bob is really Bob, but I care if Bob's key on his certificate matches the one in ~/.ssh/authorized_keys
 
 ## Features:
 We aim to create a simple cloud storage solution that doesn't reinvent the wheel. Almost all cloud storage systems run on an operating system with user lists, permissions and filesystems built into it and then add their own users, their own permissions and their own filesystems. This not only makes room for inconsistencies that have to be fixed manually, but it also generates useless overhead that affects performance. SimpleCloud exists to fix this.
