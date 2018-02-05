@@ -60,7 +60,7 @@ class Registrar(threading.Thread):
         self.stop_event = threading.Event()
         self.index = Index()
         self.observer = Observer()
-        # Client functionality
+        # Server functionality
         self.channels = {}
         self.paramiko_server = SSHServer(self.authorized_keys)
         # Client functionality
