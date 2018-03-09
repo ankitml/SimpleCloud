@@ -35,6 +35,19 @@ class IndexTests(unittest.TestCase):
 			expected = [local for _,local,_ in watches]
 			# print("Got "+str(watching)+", expected "+str(expected))
 			self.assertEqual(watching, expected)
+		watching = self.index.get_watching(57)
+		self.assertEqual(len(watching), 0)
+
+	def testWatchers(self):
+		path = "/mnt/data/Pictures/férias_escócia.jpg"
+		watchers = self.index.get_watchers(path)
+		self.assertEqual(len(watchers), 2)
+		for channel_id,new_path in watchers:
+			self.assertTrue(channel_id==20 and new_path=="/home/francisco/Pictures/férias_escócia.jpg"
+							or channel_id==21 and new_path=="/home/maria/Pictures/férias_escócia.jpg")
+		path = "/var"
+		watchers = self.index.get_watchers(path)
+		self.assertEqual(len(watchers), 0)
 
 if __name__ == "__main__":
 	unittest.main()
